@@ -295,6 +295,43 @@
       "feedback-optimization": "SKIP"
     }
   },
+  "qwaude-proxy": {
+    "stages": {
+      "workspace-scaffold": "EXECUTE",
+      "workspace-detection": "EXECUTE",
+      "state-init": "EXECUTE",
+      "intent-capture": "EXECUTE",
+      "market-research": "SKIP",
+      "feasibility": "SKIP",
+      "scope-definition": "EXECUTE",
+      "team-formation": "SKIP",
+      "rough-mockups": "SKIP",
+      "approval-handoff": "EXECUTE",
+      "reverse-engineering": "SKIP",
+      "practices-discovery": "EXECUTE",
+      "requirements-analysis": "SKIP",
+      "user-stories": "SKIP",
+      "refined-mockups": "SKIP",
+      "domain-design": "EXECUTE",
+      "units-generation": "SKIP",
+      "contract-design": "SKIP",
+      "delivery-planning": "SKIP",
+      "functional-design": "SKIP",
+      "nfr-requirements": "EXECUTE",
+      "nfr-design": "EXECUTE",
+      "infrastructure-design": "SKIP",
+      "code-generation": "EXECUTE",
+      "build-and-test": "EXECUTE",
+      "ci-pipeline": "EXECUTE",
+      "deployment-pipeline": "SKIP",
+      "environment-provisioning": "SKIP",
+      "deployment-execution": "SKIP",
+      "observability-setup": "SKIP",
+      "incident-response": "SKIP",
+      "performance-validation": "SKIP",
+      "feedback-optimization": "SKIP"
+    }
+  },
   "refactor": {
     "stages": {
       "workspace-scaffold": "EXECUTE",
