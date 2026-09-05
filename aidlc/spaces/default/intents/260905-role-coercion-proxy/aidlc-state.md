@@ -65,7 +65,7 @@
 - [ ] requirements-analysis — SKIP
 - [ ] user-stories — SKIP
 - [ ] refined-mockups — SKIP
-- [-] domain-design — EXECUTE
+- [?] domain-design — EXECUTE
 - [ ] units-generation — SKIP
 - [ ] contract-design — SKIP
 - [ ] delivery-planning — SKIP
@@ -94,7 +94,7 @@ Per unit: [TBD]
 - **Current Stage**: domain-design
 - **Next Stage**: nfr-requirements
 - **Status**: Running
-- **Last Updated**: 2026-09-05T12:33:12Z
+- **Last Updated**: 2026-09-05T12:46:10Z
 
 ## Session Resume Point
 - **Last Completed Stage**: practices-discovery
