@@ -4026,3 +4026,12 @@
 **Context**: construction > code-generation > code-generation-questions.md
 
 ---
+
+## Error Logged
+**Timestamp**: 2026-09-05T13:24:21Z
+**Event**: ERROR_LOGGED
+**Tool**: aidlc-log
+**Command**: aidlc-log decision --stage code-generation --checkpoint plan-approval --session 011Sme8ARzhDy3Yi69BKbFgu --questions-file aidlc/spaces/default/intents/260905-role-coercion-proxy/construction/code-generation/code-generation-questions.md --decision Approve this exact Code Generation plan? --options Approve Plan,Request Changes --stage-level
+**Error**: Plan Approval fingerprint does not match the active intent, target, directive epoch, plan, instructions, and Testing Contract
+
+---
