@@ -62,4 +62,4 @@ C. A manual byte-slice partial parser for just the `messages` array — highest 
 D. Not yet defined
 X. Other (please specify)
 
-[Answer]: simd-json if available on underlying arch, if not - serde fallback
+[Answer]: X. Other — prefer `simd-json` when SIMD support is available on the build/runtime architecture, falling back to `serde_json` when it isn't; same targeted-mutation strategy either way

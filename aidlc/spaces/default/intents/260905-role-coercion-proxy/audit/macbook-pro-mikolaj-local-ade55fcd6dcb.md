@@ -2569,3 +2569,29 @@
 **Context**: construction > nfr-requirements > nfr-requirements-questions.md
 
 ---
+
+## Artifact Updated
+**Timestamp**: 2026-09-05T12:52:09Z
+**Event**: ARTIFACT_UPDATED
+**Tool**: Edit
+**File**: <project-dir>/aidlc/spaces/default/intents/260905-role-coercion-proxy/construction/nfr-requirements/nfr-requirements-questions.md
+**Context**: construction > nfr-requirements > nfr-requirements-questions.md
+
+---
+
+## Decision Recorded
+**Timestamp**: 2026-09-05T12:52:16Z
+**Event**: DECISION_RECORDED
+**Stage**: nfr-requirements
+**Decision**: Q1-Q6: performance threshold, concurrency, upstream retry, health/metrics endpoints, data protection, zero-copy JSON strategy
+**Options**: See nfr-requirements-questions.md for full option sets
+
+---
+
+## Question Answered
+**Timestamp**: 2026-09-05T12:52:21Z
+**Event**: QUESTION_ANSWERED
+**Stage**: nfr-requirements
+**Details**: Q1: A (<5% p99 latency overhead, near-zero allocations on fast path). Q2: A (modest internal load, tens of concurrent requests). Q3: A (fail fast, no retry). Q4: Other (GET /health + GET /metrics Prometheus endpoint with request counts, latency histogram, coercion counts, upstream error counts). Q5: A (no additional data-protection requirement). Q6: Other (prefer simd-json when SIMD available, fallback to serde_json)
+
+---
