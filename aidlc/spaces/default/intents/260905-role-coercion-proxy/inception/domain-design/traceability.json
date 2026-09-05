@@ -1,0 +1,21 @@
+{
+  "stage": "domain-design",
+  "notes": "Requirements Analysis and User Stories were both skipped for this workflow (composed grid decision), so neither requirements.md nor stories.md exists. Upstream IDs below are synthetic FR{n} identifiers assigned 1:1, in order, to the 13 capability items in intent-backlog.md (ideation/scope-definition/intent-backlog.md), which serves as this workflow's requirements source of record.",
+  "upstream_ids": ["FR1", "FR2", "FR3", "FR4", "FR5", "FR6", "FR7", "FR8", "FR9", "FR10", "FR11", "FR12", "FR13"],
+  "coverage": [
+    { "id": "FR1", "status": "OK", "target": "Transform", "description": "Message-array transform logic (role coercion, both content shapes, unknown-field round-trip)" },
+    { "id": "FR2", "status": "OK", "target": "ProxyServer", "description": "HTTP server + request forwarding" },
+    { "id": "FR3", "status": "OK", "target": "ProxyServer", "description": "Streaming SSE pass-through" },
+    { "id": "FR4", "status": "OK", "target": "ProxyServer", "description": "Non-streaming response pass-through" },
+    { "id": "FR5", "status": "OK", "target": "ProxyServer", "description": "Configuration (env vars) — realized via the ProxyConfig entity" },
+    { "id": "FR6", "status": "OK", "target": "ProxyServer", "description": "Structured tracing logging" },
+    { "id": "FR7", "status": "OK", "target": "ProxyServer", "description": "Graceful shutdown" },
+    { "id": "FR8", "status": "OK", "target": "ProxyServer", "description": "Error handling (no panics/unwraps, 400/502/504 JSON error body)" },
+    { "id": "FR9", "status": "OK", "target": "Transform", "description": "Unit tests + property-based tests for the transform" },
+    { "id": "FR10", "status": "OK", "target": "ProxyServer", "description": "Integration tests against a mock upstream" },
+    { "id": "FR11", "status": "OK", "target": "Transform", "description": "Criterion benchmark (zero-copy transform vs. naive baseline)" },
+    { "id": "FR12", "status": "N/A", "target": "project-wide tooling (cargo clippy / cargo fmt), not a single component", "description": "clippy -D warnings / fmt --check clean" },
+    { "id": "FR13", "status": "N/A", "target": "documentation deliverable, not a component", "description": "README.md" }
+  ],
+  "reverse": []
+}
