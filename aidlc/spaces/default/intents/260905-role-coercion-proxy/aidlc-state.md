@@ -7,7 +7,7 @@
 - **Scope**: qwaude-proxy
 - **Start Date**: 2026-09-05T11:01:13Z
 - **State Version**: 8
-- **Active Agent**: aidlc-architect-agent
+- **Active Agent**: aidlc-developer-agent
 - **Worktree Path**:
 - **Bolt Refs**:
 - **Practices Affirmed Timestamp**: 2026-09-05T12:33:06Z
@@ -27,8 +27,8 @@
 
 ## Execution Plan Summary
 - **Total Stages**: 13
-- **Completed**: 9
-- **In Progress**: nfr-design
+- **Completed**: 10
+- **In Progress**: code-generation
 
 ## Runtime State
 - **Revision Count**: 0
@@ -74,9 +74,9 @@
 Per unit: [TBD]
 - [ ] functional-design — SKIP
 - [x] nfr-requirements — EXECUTE
-- [?] nfr-design — EXECUTE
+- [x] nfr-design — EXECUTE
 - [ ] infrastructure-design — SKIP
-- [ ] code-generation — EXECUTE
+- [-] code-generation — EXECUTE
 - [ ] build-and-test — EXECUTE
 - [ ] ci-pipeline — EXECUTE
 
@@ -91,12 +91,12 @@ Per unit: [TBD]
 
 ## Current Status
 - **Lifecycle Phase**: CONSTRUCTION
-- **Current Stage**: nfr-design
-- **Next Stage**: code-generation
+- **Current Stage**: code-generation
+- **Next Stage**: build-and-test
 - **Status**: Running
-- **Last Updated**: 2026-09-05T13:21:05Z
+- **Last Updated**: 2026-09-05T13:21:35Z
 
 ## Session Resume Point
-- **Last Completed Stage**: nfr-requirements
-- **Next Action**: Execute NFR Design
+- **Last Completed Stage**: nfr-design
+- **Next Action**: Execute Code Generation
 - **Pending Artifacts**: none
