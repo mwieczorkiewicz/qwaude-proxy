@@ -15,7 +15,7 @@ C. Broader than that — this proxy should also solve other request-shaping prob
 D. Not yet defined
 X. Other (please specify)
 
-[Answer]:
+[Answer]: A. Basically we want to use Claude Code with Self-Hosted Qwen-Family Models.
 
 ## Q2. Who is the customer (internal/external)? What pain are they experiencing?
 
@@ -25,7 +25,7 @@ C. Not yet defined
 D. Not applicable
 X. Other (please specify)
 
-[Answer]:
+[Answer]: Internal only. Other users - engineering team, but for the sake of implementation - assume internal.
 
 ## Q3. What does success look like? What metrics matter?
 
@@ -34,7 +34,7 @@ B. Something else
 C. Not yet defined
 X. Other (please specify)
 
-[Answer]:
+[Answer]: A. 
 
 ## Q4. What is the trigger for this initiative (market pressure, tech debt, regulation, opportunity)?
 
@@ -43,7 +43,7 @@ B. Proactive risk mitigation: not yet observed in production, but a known failur
 C. Not yet defined
 X. Other (please specify)
 
-[Answer]:
+[Answer]: Research and development activities.
 
 ## Q5. Who are the key stakeholders, who decides scope/priority, and are there any communication requirements or reporting cadence?
 
@@ -53,7 +53,7 @@ C. Not yet defined
 D. Not applicable
 X. Other (please specify)
 
-[Answer]:
+[Answer]: A
 
 ## Q6. The workflow was started with scope `qwaude-proxy` (13 of 33 stages: intent capture, scope definition, approval handoff, practices discovery, domain design, NFR requirements, NFR design, code generation, build-and-test, CI pipeline — no market research, no team formation, no UI, no deployment/infra automation). Does that match your intended product boundary?
 
@@ -62,5 +62,12 @@ B. No — I want to expand the boundary to include deployment/infra work
 C. No — I want to narrow the boundary further
 D. Not yet defined
 X. Other (please specify)
+
+[Answer]: A
+
+## Consolidated Summary Confirmation
+
+- Looks correct
+- Request changes
 
 [Answer]:
