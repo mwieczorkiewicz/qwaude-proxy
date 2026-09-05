@@ -4,7 +4,7 @@
 
 Covers `code-generation-plan.md` (13 numbered steps, embedded Testing Contract) and `unit-test-instructions.md` in full.
 
-[Approval Fingerprint]: sha256:e09cec1e21afeeb853aa3c9486ae1df7c4cbf366f500d7fcab3a71e2c94f2212
+[Approval Fingerprint]: sha256:f8a3b08e687b2328bd14ac15af87d11d2cd241ce5c84cd781166c2a30f23ba84
 
 - Approve Plan
 - Request Changes
