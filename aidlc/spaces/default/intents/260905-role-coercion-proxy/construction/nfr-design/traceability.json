@@ -1,0 +1,38 @@
+{
+  "stage": "nfr-design",
+  "notes": "No units-generation ran (zero-Unit, single-binary project), so this is a stage-level design pass covering every NFRx.y from nfr-requirements/*.md.",
+  "upstream_ids": [
+    "NFR1.1", "NFR1.2", "NFR1.3", "NFR1.4", "NFR1.5",
+    "NFR2.1", "NFR2.2", "NFR2.3", "NFR2.4", "NFR2.5", "NFR2.6", "NFR2.7",
+    "NFR3.1", "NFR3.2", "NFR3.3", "NFR3.4",
+    "NFR4.1", "NFR4.2", "NFR4.3", "NFR4.4",
+    "NFR5.1", "NFR5.2", "NFR5.3", "NFR5.4"
+  ],
+  "coverage": [
+    { "id": "NFR1.1", "status": "OK", "target": "Runtime SIMD-detection dispatch (simd-json/serde_json), targeted-mutation strategy" },
+    { "id": "NFR1.2", "status": "OK", "target": "Fast-path: no coercion needed, minimal allocation beyond parse" },
+    { "id": "NFR1.3", "status": "OK", "target": "Coercion path: bounded, documented allocation for rewritten role/content" },
+    { "id": "NFR1.4", "status": "OK", "target": "tokio multi-threaded async runtime, per-request independent tasks" },
+    { "id": "NFR1.5", "status": "OK", "target": "Streamed axum::body::Body::from_stream, no intermediate buffering" },
+    { "id": "NFR2.1", "status": "OK", "target": "Authorization header HeaderValue clone into outbound request, unchanged" },
+    { "id": "NFR2.2", "status": "OK", "target": "tracing events carry structural metadata only, never body bytes" },
+    { "id": "NFR2.3", "status": "OK", "target": "In-memory per-request buffers only, no disk/cache/db writes" },
+    { "id": "NFR2.4", "status": "N/A", "target": "CI wiring belongs to the CI Pipeline stage, not NFR Design" },
+    { "id": "NFR2.5", "status": "N/A", "target": "Already enforced via clippy deny-lints (team-practices.md); no additional design needed" },
+    { "id": "NFR2.6", "status": "OK", "target": "ErrorResponse struct, single IntoResponse construction site" },
+    { "id": "NFR2.7", "status": "OK", "target": "axum DefaultBodyLimit layer, 10 MiB default, env-configurable" },
+    { "id": "NFR3.1", "status": "OK", "target": "Stateless design preserved (Domain Design ADR-002), no locks/global state" },
+    { "id": "NFR3.2", "status": "OK", "target": "Same async design as NFR1.4" },
+    { "id": "NFR3.3", "status": "N/A", "target": "No growth projection to design against" },
+    { "id": "NFR3.4", "status": "N/A", "target": "Deployment/infra topology out of scope for this workflow" },
+    { "id": "NFR4.1", "status": "OK", "target": "hyper client connect/total timeouts, env-configurable, no retry" },
+    { "id": "NFR4.2", "status": "OK", "target": "axum with_graceful_shutdown on SIGINT/SIGTERM" },
+    { "id": "NFR4.3", "status": "OK", "target": "Result propagation via ?, single error-to-response conversion site" },
+    { "id": "NFR4.4", "status": "N/A", "target": "No deployed instance in this workflow's scope" },
+    { "id": "NFR5.1", "status": "OK", "target": "tracing_subscriber + EnvFilter, structured debug/error events" },
+    { "id": "NFR5.2", "status": "OK", "target": "GET /health route, no dependency check" },
+    { "id": "NFR5.3", "status": "OK", "target": "metrics + metrics-exporter-prometheus, 4 named metrics at GET /metrics" },
+    { "id": "NFR5.4", "status": "N/A", "target": "Single-hop proxy, no distributed tracing needed" }
+  ],
+  "reverse": []
+}
