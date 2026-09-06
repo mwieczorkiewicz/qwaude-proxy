@@ -1,0 +1,48 @@
+name: CI
+
+# Test/lint/audit gate only -- no deploy step. Per team.md's affirmed
+# Testing Posture, "deployment/infrastructure/CI-CD automation is out of
+# scope" refers to deployment/hosting automation specifically; this
+# build-and-check workflow is in-scope project tooling.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: fmt, clippy, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt --check
+        run: cargo fmt --check
+
+      - name: cargo clippy -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: cargo test --all-targets
+        run: cargo test --all-targets
+
+  audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
