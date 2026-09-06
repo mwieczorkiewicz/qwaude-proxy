@@ -25,6 +25,7 @@
 
 <!-- Project-specific specialisation. -->
 
+- For a containerized service, container e2e/compilation CI coverage means: running the actual multi-stage `docker build`, plus starting the built container and hitting its health/metrics endpoints over real HTTP. (learned 2026-09-06) <!-- cid:260905-role-coercion-proxy:ci-pipeline:d788dc2b0aa394b26f0de3b6884dc37259bddf93c17137ba7ca58a064395ab33 -->
 ## Deployment
 
 <!-- Project-specific specialisation. -->
@@ -79,3 +80,5 @@ static upstream credential (Q9). (affirmed 2026-09-05)
 
 <!-- Project-specific corrections from human feedback. -->
 <!-- Format: NEVER/ALWAYS [behavior] (learned [date]) -->
+- Prefer a `scratch` final container image when the binary can be fully static (e.g. built with `rustls`, not OpenSSL); fall back to a distroless base otherwise. (learned 2026-09-06) <!-- cid:260905-role-coercion-proxy:ci-pipeline:297d293d764b7b0b2bdce92b1db569caa8e7cbb9bef25cc1806536c1cc41ee7f -->
+- CI publish steps should re-tag and push an already-built, already-smoke-tested image rather than rebuilding for the publish step, so the published artifact is provably identical to what was tested. (learned 2026-09-06) <!-- cid:260905-role-coercion-proxy:ci-pipeline:86a34656b0f4f697b5b70c5471bcdcb0389ee6f294db50c910154a946556e639 -->
