@@ -60,13 +60,31 @@ pub enum ProxyError {
 }
 
 impl ProxyError {
-    fn status(&self) -> StatusCode {
+    /// `pub(crate)` so `server.rs`'s metrics wrapper can label
+    /// `proxy_requests_total` with the same status this error maps to,
+    /// without duplicating the match.
+    pub(crate) fn status(&self) -> StatusCode {
         match self {
             ProxyError::InvalidRequest(_) => StatusCode::BAD_REQUEST,
             ProxyError::BodyTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             ProxyError::UpstreamConnectFailed => StatusCode::BAD_GATEWAY,
             ProxyError::UpstreamTimeout => StatusCode::GATEWAY_TIMEOUT,
             ProxyError::Internal => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+
+    /// The `kind` label value for `proxy_upstream_errors_total`, per
+    /// `nfr-design/observability-design.md` NFR5.3 (`connect_timeout`,
+    /// `request_timeout`, `non_2xx`). `None` for errors that never reached
+    /// the upstream at all (a malformed request, an oversized body).
+    /// `non_2xx` itself is recorded directly in `server.rs`, next to where
+    /// the upstream's status is read — a non-2xx upstream response is not a
+    /// `ProxyError` at all, since it is still passed through verbatim.
+    pub(crate) fn upstream_error_kind(&self) -> Option<&'static str> {
+        match self {
+            ProxyError::UpstreamConnectFailed => Some("connect_timeout"),
+            ProxyError::UpstreamTimeout => Some("request_timeout"),
+            ProxyError::InvalidRequest(_) | ProxyError::BodyTooLarge | ProxyError::Internal => None,
         }
     }
 
@@ -170,6 +188,20 @@ mod tests {
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
         assert_eq!(body["error"]["type"], "internal_error");
         assert_eq!(body["error"]["message"], "an internal error occurred");
+    }
+
+    #[test]
+    fn upstream_error_kind_matches_observability_design_vocabulary() {
+        assert_eq!(
+            ProxyError::UpstreamConnectFailed.upstream_error_kind(),
+            Some("connect_timeout")
+        );
+        assert_eq!(
+            ProxyError::UpstreamTimeout.upstream_error_kind(),
+            Some("request_timeout")
+        );
+        assert_eq!(ProxyError::BodyTooLarge.upstream_error_kind(), None);
+        assert_eq!(ProxyError::Internal.upstream_error_kind(), None);
     }
 
     #[test]

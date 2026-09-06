@@ -31,15 +31,16 @@ use crate::transform;
 use axum::body::Body;
 use axum::extract::{Request, State};
 use axum::http::{header, HeaderName, Request as HttpRequest};
-use axum::response::Response;
+use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::Router;
 use http_body_util::{BodyExt, Limited};
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::client::legacy::Client as LegacyClient;
 use hyper_util::rt::TokioExecutor;
+use metrics_exporter_prometheus::PrometheusHandle;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// The outbound client used to forward requests to `VLLM_BASE_URL`. Plain
 /// HTTP only (no TLS connector) — matches the documented default upstream
@@ -58,6 +59,7 @@ fn build_http_client(connect_timeout: Duration) -> HttpClient {
 pub struct AppState {
     pub config: Arc<ProxyConfig>,
     client: HttpClient,
+    metrics_handle: PrometheusHandle,
 }
 
 impl AppState {
@@ -66,6 +68,7 @@ impl AppState {
         Self {
             config: Arc::new(config),
             client,
+            metrics_handle: crate::metrics::shared_handle(),
         }
     }
 }
@@ -75,11 +78,19 @@ pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/v1/chat/completions", post(chat_completions_handler))
         .route("/health", get(health_handler))
+        .route("/metrics", get(metrics_handler))
         .with_state(state)
 }
 
 async fn health_handler() -> &'static str {
     "ok"
+}
+
+async fn metrics_handler(State(state): State<AppState>) -> impl IntoResponse {
+    (
+        [(header::CONTENT_TYPE, "text/plain; version=0.0.4")],
+        state.metrics_handle.render(),
+    )
 }
 
 /// Headers that must not be copied verbatim from the upstream response onto
@@ -100,9 +111,42 @@ fn is_hop_by_hop_header(name: &HeaderName) -> bool {
     )
 }
 
+/// The actual axum route handler: records `proxy_requests_total` (labeled
+/// by final status) and `proxy_request_duration_seconds` around
+/// [`handle_chat_completions`] regardless of outcome, then converts its
+/// `Result` into a `Response` (via `ProxyError`'s own `IntoResponse` impl on
+/// the error path).
 #[tracing::instrument(skip_all)]
-async fn chat_completions_handler(
-    State(state): State<AppState>,
+async fn chat_completions_handler(State(state): State<AppState>, request: Request) -> Response {
+    let start = Instant::now();
+    let result = handle_chat_completions(&state, request).await;
+    let elapsed = start.elapsed();
+
+    let status = match &result {
+        Ok(response) => response.status(),
+        Err(err) => err.status(),
+    };
+    metrics::counter!(
+        crate::metrics::REQUESTS_TOTAL,
+        "status" => status.as_u16().to_string(),
+    )
+    .increment(1);
+    metrics::histogram!(crate::metrics::REQUEST_DURATION_SECONDS).record(elapsed.as_secs_f64());
+
+    if let Err(err) = &result {
+        if let Some(kind) = err.upstream_error_kind() {
+            metrics::counter!(crate::metrics::UPSTREAM_ERRORS_TOTAL, "kind" => kind).increment(1);
+        }
+    }
+
+    match result {
+        Ok(response) => response,
+        Err(err) => err.into_response(),
+    }
+}
+
+async fn handle_chat_completions(
+    state: &AppState,
     request: Request,
 ) -> Result<Response, ProxyError> {
     let authorization = request.headers().get(header::AUTHORIZATION).cloned();
@@ -123,6 +167,7 @@ async fn chat_completions_handler(
             coerced_indices = ?report.coerced_indices,
             "coerced mid-conversation system message role(s)"
         );
+        metrics::counter!(crate::metrics::MESSAGES_COERCED_TOTAL).increment(report.count() as u64);
     }
 
     // Local-debugging-only escape hatch: never enabled against real traffic
@@ -165,6 +210,14 @@ async fn chat_completions_handler(
         tracing::error!(error = %err, "upstream connection failed");
         ProxyError::UpstreamConnectFailed
     })?;
+
+    if !upstream_response.status().is_success() {
+        // A non-2xx upstream response is not a ProxyError -- it is still
+        // passed through to the client verbatim, per FR4 -- but it is
+        // still worth surfacing in proxy_upstream_errors_total{kind="non_2xx"}
+        // for operational visibility.
+        metrics::counter!(crate::metrics::UPSTREAM_ERRORS_TOTAL, "kind" => "non_2xx").increment(1);
+    }
 
     let (parts, upstream_body) = upstream_response.into_parts();
     let mut response_builder = Response::builder().status(parts.status);
