@@ -9,4 +9,5 @@ pub mod error;
 pub mod logging;
 pub mod metrics;
 pub mod server;
+pub mod shutdown;
 pub mod transform;

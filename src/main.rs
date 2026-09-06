@@ -37,9 +37,11 @@ async fn main() -> ExitCode {
         }
     };
 
-    // Graceful-shutdown wiring lands in Step 9 (code-generation-plan.md);
-    // this is the plain `axum::serve` stub the plan calls for at Step 7.
-    match axum::serve(listener, app).await {
+    let result = axum::serve(listener, app)
+        .with_graceful_shutdown(role_coercion_proxy::shutdown::signal())
+        .await;
+
+    match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             tracing::error!(error = %err, "server error");
