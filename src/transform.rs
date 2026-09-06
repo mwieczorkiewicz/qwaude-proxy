@@ -8,27 +8,40 @@
 //!
 //! ## Zero-copy / targeted-mutation design note
 //!
-//! The approved design called for runtime SIMD-feature-detection dispatch
-//! between `simd-json` and `serde_json`. That dual-dispatch was evaluated and
-//! deliberately simplified to a `serde_json::Value`-only implementation (an
-//! explicitly pre-approved fallback — see `code-generation-plan.md` Step 4 and
-//! `code-summary.md`), because `simd_json::BorrowedValue`/`OwnedValue` and
-//! `serde_json::Value` are structurally incompatible types: a genuine dual
-//! path would require either duplicating this entire mutation algorithm once
-//! per value-tree type, or introducing a trait abstraction over both — real
-//! added complexity for a proxy whose latency is dominated by the upstream
-//! LLM call, not JSON parsing. `simd-json` was dropped from `Cargo.toml`
-//! accordingly.
+//! Parsing dispatches at runtime between `simd-json` (preferred, when the
+//! running CPU has the SIMD features simd-json's kernels need) and
+//! `serde_json` (fallback, always available): `simd_json::serde::from_slice`
+//! is a serde-*generic* deserializer, so it can target `serde_json::Value`
+//! directly — both parse paths therefore produce the exact same value type,
+//! and every mutation below is written once and shared by both, rather than
+//! duplicated per value-tree implementation. `parse_request_value` below is
+//! the single place that picks the path; `simd_json_available()` checks the
+//! CPU once per process (`OnceLock`) rather than per request, since CPU
+//! feature support cannot change while the process is running.
 //!
-//! What *is* implemented is targeted mutation within `serde_json`'s ownership
-//! model: the request body is parsed into an owned `Value` tree exactly once
-//! (unavoidable — `serde_json::Value` has no borrowed/zero-copy mode), and
-//! from then on only the `role` and `content` fields of messages that
-//! actually need coercion are mutated in place. No message is cloned; no
-//! message other than the ones being rewritten is touched at all. `content`
-//! prefixing builds exactly one new `String` per rewritten message (sized
-//! with `String::with_capacity` to avoid reallocation growth), rather than
-//! allocating an intermediate prefix string and concatenating.
+//! simd-json's own kernels additionally dispatch internally between
+//! AVX2/SSE4.2 (x86_64) at runtime — `simd_json_available()` only decides
+//! whether to *attempt* the simd-json path at all (i.e. whether this build's
+//! target architecture and this CPU support it), not which specific kernel
+//! simd-json picks once inside it.
+//!
+//! simd-json requires a mutable, appropriately-padded byte buffer to parse
+//! in place, so taking the simd-json path costs one `body.to_vec()` copy
+//! that the serde_json path does not pay. Reserialization always goes
+//! through `serde_json::to_vec` regardless of which parser produced the
+//! `Value` — SIMD acceleration chiefly benefits the parse/validation step,
+//! which is where this crate's original zero-copy concern was scoped.
+//!
+//! What *is* shared by both paths is targeted mutation within
+//! `serde_json::Value`'s ownership model: the request body is parsed into an
+//! owned `Value` tree exactly once (unavoidable — `serde_json::Value` has no
+//! borrowed/zero-copy mode), and from then on only the `role` and `content`
+//! fields of messages that actually need coercion are mutated in place. No
+//! message is cloned; no message other than the ones being rewritten is
+//! touched at all. `content` prefixing builds exactly one new `String` per
+//! rewritten message (sized with `String::with_capacity` to avoid
+//! reallocation growth), rather than allocating an intermediate prefix
+//! string and concatenating.
 //!
 //! One further caveat on "byte-identical" round-tripping: re-serializing a
 //! `serde_json::Value` produces a canonical minimal JSON rendering. Untouched
@@ -40,7 +53,9 @@
 //! see `README.md`'s Performance section and `benches/transform_bench.rs`
 //! for the measured allocation/latency cost against a naive baseline.
 
+use serde::de::Error as _;
 use serde_json::Value;
+use std::sync::OnceLock;
 
 /// Role value that must never appear at any message index other than 0.
 const SYSTEM_ROLE: &str = "system";
@@ -111,7 +126,7 @@ pub fn coerce_system_messages(
     body: &[u8],
     notice_prefix: &str,
 ) -> Result<(Vec<u8>, CoercionReport), TransformError> {
-    let mut value: Value = serde_json::from_slice(body)?;
+    let mut value: Value = parse_request_value(body)?;
     let obj = value.as_object_mut().ok_or(TransformError::NotAnObject)?;
     let messages = obj
         .get_mut("messages")
@@ -120,6 +135,57 @@ pub fn coerce_system_messages(
     let report = coerce_messages(messages, notice_prefix);
     let out = serde_json::to_vec(&value)?;
     Ok((out, report))
+}
+
+/// Whether this process should attempt the simd-json parse path at all.
+/// Checked once (`OnceLock`) rather than per request — CPU feature support
+/// cannot change while the process is running, so there is nothing to gain
+/// from re-checking it on every call.
+fn simd_json_available() -> bool {
+    static AVAILABLE: OnceLock<bool> = OnceLock::new();
+    *AVAILABLE.get_or_init(|| {
+        #[cfg(target_arch = "x86_64")]
+        {
+            std::is_x86_feature_detected!("sse4.2")
+        }
+        #[cfg(target_arch = "aarch64")]
+        {
+            // simd-json's NEON kernel targets baseline aarch64; no further
+            // runtime feature check is needed on this architecture.
+            true
+        }
+        #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+        {
+            false
+        }
+    })
+}
+
+/// Parse `body` into a `serde_json::Value`, preferring simd-json's
+/// SIMD-accelerated parser when this CPU supports it and falling back to
+/// `serde_json` otherwise. Both paths produce the same `Value` type, so
+/// every mutation in this module is written once and shared by both.
+fn parse_request_value(body: &[u8]) -> Result<Value, TransformError> {
+    if simd_json_available() {
+        parse_via_simd_json(body)
+    } else {
+        parse_via_serde_json(body)
+    }
+}
+
+/// The SIMD-accelerated path. simd-json parses in place and needs a
+/// mutable, owned buffer, so this path costs one extra copy that
+/// `parse_via_serde_json` does not pay.
+fn parse_via_simd_json(body: &[u8]) -> Result<Value, TransformError> {
+    let mut owned = body.to_vec();
+    simd_json::serde::from_slice::<Value>(&mut owned)
+        .map_err(|err| TransformError::InvalidJson(serde_json::Error::custom(err.to_string())))
+}
+
+/// The fallback path, used directly on platforms/CPUs `simd_json_available`
+/// returns `false` for.
+fn parse_via_serde_json(body: &[u8]) -> Result<Value, TransformError> {
+    Ok(serde_json::from_slice(body)?)
 }
 
 /// Does this message object have `role: "system"`? Any non-string or
@@ -395,6 +461,25 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn simd_json_and_serde_json_parse_paths_agree() {
+        // simd_json_available() is a CPU/architecture check, so which path
+        // production code takes depends on the host running it. Call both
+        // parse functions directly so this test's coverage doesn't depend
+        // on the host CPU either.
+        let body = br#"{"model":"qwen","stream":false,"messages":[{"role":"user","content":"hi"},{"role":"system","content":"reminder","name":"x"}]}"#;
+        let via_simd = parse_via_simd_json(body).expect("simd_json parses valid json");
+        let via_serde = parse_via_serde_json(body).expect("serde_json parses valid json");
+        assert_eq!(via_simd, via_serde);
+    }
+
+    #[test]
+    fn both_parse_paths_reject_malformed_json() {
+        let body = b"not json";
+        assert!(parse_via_simd_json(body).is_err());
+        assert!(parse_via_serde_json(body).is_err());
     }
 
     #[test]

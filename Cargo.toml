@@ -28,9 +28,12 @@ tokio-stream = "0.1"
 serde = { version = "1", features = ["derive"] }
 # `preserve_order` keeps object key order stable across the parse/mutate/reserialize
 # round-trip in transform.rs, so untouched fields round-trip byte-identically in
-# both value and position. See src/transform.rs module doc for why simd-json's
-# dual-dispatch parse path was simplified to serde_json-only.
+# both value and position.
 serde_json = { version = "1", features = ["raw_value", "preserve_order"] }
+# simd-json's serde-compatible deserializer (`simd_json::serde::from_slice`) can
+# target `serde_json::Value` directly, so the SIMD-accelerated parse path and the
+# serde_json fallback path share one mutation implementation in transform.rs.
+simd-json = "0.13"
 thiserror = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
