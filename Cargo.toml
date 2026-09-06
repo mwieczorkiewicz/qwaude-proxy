@@ -47,6 +47,7 @@ proptest = "1"
 criterion = { version = "0.5", features = ["async_tokio"] }
 wiremock = "0.6"
 tokio-test = "0.4"
+tower = { version = "0.5", features = ["util"] }
 
 [lints.clippy]
 unwrap_used = "deny"

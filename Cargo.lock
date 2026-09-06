@@ -1425,6 +1425,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-test",
+ "tower",
  "tracing",
  "tracing-subscriber",
  "wiremock",
