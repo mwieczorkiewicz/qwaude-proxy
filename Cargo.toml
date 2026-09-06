@@ -26,8 +26,11 @@ http-body-util = "0.1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "net", "time"] }
 tokio-stream = "0.1"
 serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["raw_value"] }
-simd-json = "0.13"
+# `preserve_order` keeps object key order stable across the parse/mutate/reserialize
+# round-trip in transform.rs, so untouched fields round-trip byte-identically in
+# both value and position. See src/transform.rs module doc for why simd-json's
+# dual-dispatch parse path was simplified to serde_json-only.
+serde_json = { version = "1", features = ["raw_value", "preserve_order"] }
 thiserror = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
