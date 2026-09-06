@@ -1,9 +1,9 @@
-//! `role-coercion-proxy` — an HTTP proxy sitting in front of a vLLM chat-completions
+//! `qwaude-proxy` — an HTTP proxy sitting in front of a vLLM chat-completions
 //! endpoint that rewrites mid-conversation `role: "system"` messages so vLLM's chat
 //! template does not reject them.
 
-use role_coercion_proxy::config::ProxyConfig;
-use role_coercion_proxy::server::{build_router, AppState};
+use qwaude_proxy::config::ProxyConfig;
+use qwaude_proxy::server::{build_router, AppState};
 use std::process::ExitCode;
 use tokio::net::TcpListener;
 
@@ -17,13 +17,13 @@ async fn main() -> ExitCode {
         }
     };
 
-    role_coercion_proxy::logging::init(&config.log_level);
+    qwaude_proxy::logging::init(&config.log_level);
 
     let listen_addr = config.listen_addr.clone();
     tracing::info!(
         listen_addr = %listen_addr,
         vllm_base_url = %config.vllm_base_url,
-        "starting role-coercion-proxy"
+        "starting qwaude-proxy"
     );
 
     let state = AppState::new(config);
@@ -38,7 +38,7 @@ async fn main() -> ExitCode {
     };
 
     let result = axum::serve(listener, app)
-        .with_graceful_shutdown(role_coercion_proxy::shutdown::signal())
+        .with_graceful_shutdown(qwaude_proxy::shutdown::signal())
         .await;
 
     match result {

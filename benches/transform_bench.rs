@@ -21,7 +21,7 @@
 #![allow(clippy::expect_used)]
 
 use criterion::{BenchmarkId, Criterion};
-use role_coercion_proxy::transform;
+use qwaude_proxy::transform;
 use serde::{Deserialize, Serialize};
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::hint::black_box;

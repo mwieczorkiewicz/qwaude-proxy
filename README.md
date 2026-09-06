@@ -1,4 +1,4 @@
-# role-coercion-proxy
+# qwaude-proxy
 
 An HTTP proxy that fixes a specific incompatibility between an
 Anthropic-shaped tool-calling pipeline and vLLM's chat template.
@@ -15,7 +15,7 @@ beginning")` whenever a `role: "system"` message appears anywhere in the
 sometimes inject additional system-role messages mid-conversation (tool
 reminders, policy nudges), which vLLM's tokenizer then rejects outright.
 
-`role-coercion-proxy` sits directly in front of vLLM and rewrites the
+`qwaude-proxy` sits directly in front of vLLM and rewrites the
 request just enough to avoid that: it leaves `messages[0]` alone, and for
 every *other* message whose `role` is `"system"`, it rewrites `role` to
 `"user"` and prepends a configurable notice prefix to that message's

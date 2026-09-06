@@ -10,8 +10,8 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, dead_code)]
 
-use role_coercion_proxy::config::ProxyConfig;
-use role_coercion_proxy::server::{build_router, AppState};
+use qwaude_proxy::config::ProxyConfig;
+use qwaude_proxy::server::{build_router, AppState};
 use serde_json::json;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};

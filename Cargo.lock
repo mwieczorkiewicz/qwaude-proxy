@@ -1263,6 +1263,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "qwaude-proxy"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "criterion",
+ "futures-util",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "metrics",
+ "metrics-exporter-prometheus",
+ "proptest",
+ "serde",
+ "serde_json",
+ "simd-json",
+ "thiserror",
+ "tokio",
+ "tokio-stream",
+ "tokio-test",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+ "wiremock",
+]
+
+[[package]]
 name = "r-efi"
 version = "5.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1402,33 +1429,6 @@ dependencies = [
  "libc",
  "untrusted",
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "role-coercion-proxy"
-version = "0.1.0"
-dependencies = [
- "axum",
- "bytes",
- "criterion",
- "futures-util",
- "http-body-util",
- "hyper",
- "hyper-util",
- "metrics",
- "metrics-exporter-prometheus",
- "proptest",
- "serde",
- "serde_json",
- "simd-json",
- "thiserror",
- "tokio",
- "tokio-stream",
- "tokio-test",
- "tower",
- "tracing",
- "tracing-subscriber",
- "wiremock",
 ]
 
 [[package]]

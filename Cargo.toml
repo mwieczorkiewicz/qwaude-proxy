@@ -1,5 +1,5 @@
 [package]
-name = "role-coercion-proxy"
+name = "qwaude-proxy"
 version = "0.1.0"
 edition = "2021"
 description = "HTTP proxy that rewrites mid-conversation system-role chat messages before they reach vLLM's chat template."
@@ -7,11 +7,11 @@ license = "MIT"
 publish = false
 
 [lib]
-name = "role_coercion_proxy"
+name = "qwaude_proxy"
 path = "src/lib.rs"
 
 [[bin]]
-name = "role-coercion-proxy"
+name = "qwaude-proxy"
 path = "src/main.rs"
 
 [[bench]]

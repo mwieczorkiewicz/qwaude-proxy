@@ -1,4 +1,4 @@
-//! Library crate for `role-coercion-proxy`.
+//! Library crate for `qwaude-proxy`.
 //!
 //! Splitting the binary into a thin `main.rs` plus this library lets integration
 //! tests and benchmarks construct the axum `Router` and call `transform` directly,
