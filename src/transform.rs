@@ -89,8 +89,18 @@ pub enum TransformError {
 /// string nor a content-block array, still has its `role` coerced but its
 /// content is left as-is.
 pub fn coerce_messages(messages: &mut [Value], notice_prefix: &str) -> CoercionReport {
-    let _ = (messages, notice_prefix);
-    unimplemented!("implemented in code-generation-plan.md Step 4")
+    let mut report = CoercionReport::default();
+    for (idx, message) in messages.iter_mut().enumerate() {
+        if idx == 0 {
+            continue;
+        }
+        if !is_system_role(message) {
+            continue;
+        }
+        coerce_one_message(message, notice_prefix);
+        report.coerced_indices.push(idx);
+    }
+    report
 }
 
 /// Byte-level entry point used by the HTTP handler: parses `body` as a JSON
@@ -101,8 +111,67 @@ pub fn coerce_system_messages(
     body: &[u8],
     notice_prefix: &str,
 ) -> Result<(Vec<u8>, CoercionReport), TransformError> {
-    let _ = (body, notice_prefix);
-    unimplemented!("implemented in code-generation-plan.md Step 4")
+    let mut value: Value = serde_json::from_slice(body)?;
+    let obj = value.as_object_mut().ok_or(TransformError::NotAnObject)?;
+    let messages = obj
+        .get_mut("messages")
+        .and_then(Value::as_array_mut)
+        .ok_or(TransformError::MissingMessagesArray)?;
+    let report = coerce_messages(messages, notice_prefix);
+    let out = serde_json::to_vec(&value)?;
+    Ok((out, report))
+}
+
+/// Does this message object have `role: "system"`? Any non-string or
+/// missing `role` field is treated as "not system" rather than panicking.
+fn is_system_role(message: &Value) -> bool {
+    message.get("role").and_then(Value::as_str) == Some(SYSTEM_ROLE)
+}
+
+/// Rewrite one message in place: `role` becomes `"user"`, and `content` (if
+/// present and in a recognized shape) gets `notice_prefix` prepended.
+fn coerce_one_message(message: &mut Value, notice_prefix: &str) {
+    let Some(obj) = message.as_object_mut() else {
+        // Not an object at all (malformed input) — nothing sensible to coerce.
+        return;
+    };
+    obj.insert("role".to_string(), Value::String(USER_ROLE.to_string()));
+    if let Some(content) = obj.get_mut("content") {
+        prefix_content(content, notice_prefix);
+    }
+}
+
+/// Prepend `notice_prefix` to a message's text content, in place.
+///
+/// - Plain string content: prefix directly, one allocation sized up front.
+/// - Content-block array (`[{"type": "text", "text": "..."}]`): prefix only
+///   the first block whose `"type"` is `"text"` — every other block (images,
+///   later text blocks, cache-control hints, etc.) is left untouched.
+/// - Anything else (`null`, a number, an object, a string-less block) is
+///   left as-is: there is no text to prefix, and this must never panic.
+fn prefix_content(content: &mut Value, notice_prefix: &str) {
+    match content {
+        Value::String(s) => prepend_in_place(s, notice_prefix),
+        Value::Array(blocks) => {
+            if let Some(Value::String(s)) = blocks
+                .iter_mut()
+                .find(|b| b.get("type").and_then(Value::as_str) == Some("text"))
+                .and_then(|b| b.get_mut("text"))
+            {
+                prepend_in_place(s, notice_prefix);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Prepend `prefix` to `s` in place with a single reallocation-sized
+/// allocation, avoiding an intermediate `format!`/`+`-concatenation string.
+fn prepend_in_place(s: &mut String, prefix: &str) {
+    let mut rewritten = String::with_capacity(prefix.len() + s.len());
+    rewritten.push_str(prefix);
+    rewritten.push_str(s);
+    *s = rewritten;
 }
 
 #[cfg(test)]
@@ -222,7 +291,10 @@ mod tests {
         let m = &messages[1];
         assert_eq!(m["name"], json!("sys-reminder"));
         assert_eq!(m["tool_call_id"], json!("call_123"));
-        assert_eq!(m["tool_calls"], json!([{"id": "call_1", "type": "function"}]));
+        assert_eq!(
+            m["tool_calls"],
+            json!([{"id": "call_1", "type": "function"}])
+        );
         assert_eq!(m["cache_control"], json!({"type": "ephemeral"}));
         assert_eq!(m["x_unknown_future_field"], json!({"nested": [1, 2, 3]}));
     }
@@ -282,8 +354,9 @@ mod tests {
     }
 
     fn arb_message() -> impl Strategy<Value = Value> {
-        (arb_role(), arb_content())
-            .prop_map(|(role, content)| json!({"role": role, "content": content, "name": "fixed-name"}))
+        (arb_role(), arb_content()).prop_map(
+            |(role, content)| json!({"role": role, "content": content, "name": "fixed-name"}),
+        )
     }
 
     fn arb_messages() -> impl Strategy<Value = Vec<Value>> {
