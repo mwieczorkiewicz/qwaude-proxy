@@ -1,0 +1,28 @@
+{
+  "stage": "code-generation",
+  "unit": null,
+  "version": 1,
+  "writes": [
+    { "path": "Cargo.toml" },
+    { "path": "Cargo.lock" },
+    { "path": "rustfmt.toml" },
+    { "path": ".gitignore" },
+    { "path": ".github/workflows/ci.yml" },
+    { "path": "src/main.rs" },
+    { "path": "src/lib.rs" },
+    { "path": "src/config.rs" },
+    { "path": "src/error.rs" },
+    { "path": "src/logging.rs" },
+    { "path": "src/metrics.rs" },
+    { "path": "src/server.rs" },
+    { "path": "src/shutdown.rs" },
+    { "path": "src/transform.rs" },
+    { "path": "tests/common/mod.rs" },
+    { "path": "tests/integration.rs" },
+    { "path": "tests/logging.rs" },
+    { "path": "tests/shutdown.rs" },
+    { "path": "tests/metrics.rs" },
+    { "path": "benches/transform_bench.rs" },
+    { "path": "README.md" }
+  ]
+}
