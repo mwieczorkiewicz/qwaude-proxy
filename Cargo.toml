@@ -1,0 +1,52 @@
+[package]
+name = "role-coercion-proxy"
+version = "0.1.0"
+edition = "2021"
+description = "HTTP proxy that rewrites mid-conversation system-role chat messages before they reach vLLM's chat template."
+license = "MIT"
+publish = false
+
+[lib]
+name = "role_coercion_proxy"
+path = "src/lib.rs"
+
+[[bin]]
+name = "role-coercion-proxy"
+path = "src/main.rs"
+
+[[bench]]
+name = "transform_bench"
+harness = false
+
+[dependencies]
+axum = { version = "0.7", features = ["http1", "json", "tokio"] }
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["client", "client-legacy", "http1", "tokio"] }
+http-body-util = "0.1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "net", "time"] }
+tokio-stream = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["raw_value"] }
+simd-json = "0.13"
+thiserror = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+metrics = "0.23"
+metrics-exporter-prometheus = "0.15"
+bytes = "1"
+futures-util = "0.3"
+
+[dev-dependencies]
+proptest = "1"
+criterion = { version = "0.5", features = ["async_tokio"] }
+wiremock = "0.6"
+tokio-test = "0.4"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+
+[profile.release]
+opt-level = 3
+lto = true

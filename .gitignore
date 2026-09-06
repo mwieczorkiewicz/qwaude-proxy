@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Rust
+# Cargo.lock is committed (reproducible builds, `cargo audit`) per team practice.
+/target/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

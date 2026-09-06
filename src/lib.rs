@@ -1,0 +1,11 @@
+//! Library crate for `role-coercion-proxy`.
+//!
+//! Splitting the binary into a thin `main.rs` plus this library lets integration
+//! tests and benchmarks construct the axum `Router` and call `transform` directly,
+//! in-process, without spawning the compiled binary.
+
+pub mod config;
+pub mod error;
+pub mod metrics;
+pub mod server;
+pub mod transform;
