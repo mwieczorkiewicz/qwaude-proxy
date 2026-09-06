@@ -2,8 +2,13 @@
 //! `wiremock` mock upstream or a small hand-rolled raw-socket upstream (for
 //! the streaming-backpressure test, which needs real inter-chunk timing that
 //! wiremock's canned-response API cannot produce).
+//!
+//! Each file under `tests/` compiles as its own separate binary crate, so
+//! not every helper here is used by every one of them; `dead_code` is
+//! allowed for that reason rather than because anything here is unused in
+//! the suite as a whole.
 
-#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, dead_code)]
 
 use role_coercion_proxy::config::ProxyConfig;
 use role_coercion_proxy::server::{build_router, AppState};
@@ -25,6 +30,7 @@ pub fn test_config(vllm_base_url: String) -> ProxyConfig {
         max_request_body_size: 1024 * 1024, // 1 MiB
         connect_timeout: Duration::from_millis(500),
         total_timeout: Duration::from_secs(2),
+        verbose_payload_logging: false,
     }
 }
 

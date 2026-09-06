@@ -17,14 +17,22 @@ async fn main() -> ExitCode {
         }
     };
 
+    role_coercion_proxy::logging::init(&config.log_level);
+
     let listen_addr = config.listen_addr.clone();
+    tracing::info!(
+        listen_addr = %listen_addr,
+        vllm_base_url = %config.vllm_base_url,
+        "starting role-coercion-proxy"
+    );
+
     let state = AppState::new(config);
     let app = build_router(state);
 
     let listener = match TcpListener::bind(&listen_addr).await {
         Ok(listener) => listener,
         Err(err) => {
-            eprintln!("failed to bind {listen_addr}: {err}");
+            tracing::error!(error = %err, listen_addr = %listen_addr, "failed to bind listen address");
             return ExitCode::FAILURE;
         }
     };
@@ -34,7 +42,7 @@ async fn main() -> ExitCode {
     match axum::serve(listener, app).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
-            eprintln!("server error: {err}");
+            tracing::error!(error = %err, "server error");
             ExitCode::FAILURE
         }
     }

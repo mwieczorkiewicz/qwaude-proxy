@@ -20,6 +20,10 @@ pub const DEFAULT_CONNECT_TIMEOUT_SECS: u64 = 5;
 /// request end-to-end (a streaming response is bounded only until its first
 /// byte arrives, not for the duration of the stream) before failing with a 504.
 pub const DEFAULT_TOTAL_TIMEOUT_SECS: u64 = 30;
+/// `VERBOSE_PAYLOAD_LOGGING` — off by default. When `true`, the handler
+/// additionally logs request/response payload content at `debug`, for local
+/// debugging only; never enable this against real traffic.
+pub const DEFAULT_VERBOSE_PAYLOAD_LOGGING: bool = false;
 
 /// Fully resolved runtime configuration for one proxy process.
 #[derive(Debug, Clone, PartialEq)]
@@ -31,6 +35,7 @@ pub struct ProxyConfig {
     pub max_request_body_size: usize,
     pub connect_timeout: Duration,
     pub total_timeout: Duration,
+    pub verbose_payload_logging: bool,
 }
 
 /// A single invalid environment variable value.
@@ -95,6 +100,12 @@ impl ProxyConfig {
             "UPSTREAM_TOTAL_TIMEOUT_SECS",
             "must be a positive integer number of seconds",
         )?;
+        let verbose_payload_logging = parse_or_default(
+            source.get("VERBOSE_PAYLOAD_LOGGING"),
+            DEFAULT_VERBOSE_PAYLOAD_LOGGING,
+            "VERBOSE_PAYLOAD_LOGGING",
+            "must be `true` or `false`",
+        )?;
 
         Ok(Self {
             listen_addr,
@@ -104,6 +115,7 @@ impl ProxyConfig {
             max_request_body_size,
             connect_timeout: Duration::from_secs(connect_timeout_secs),
             total_timeout: Duration::from_secs(total_timeout_secs),
+            verbose_payload_logging,
         })
     }
 }
@@ -159,6 +171,17 @@ mod tests {
             config.total_timeout,
             Duration::from_secs(DEFAULT_TOTAL_TIMEOUT_SECS)
         );
+        assert_eq!(
+            config.verbose_payload_logging,
+            DEFAULT_VERBOSE_PAYLOAD_LOGGING
+        );
+    }
+
+    #[test]
+    fn verbose_payload_logging_is_overridable() {
+        let config = ProxyConfig::resolve(&fake_env(&[("VERBOSE_PAYLOAD_LOGGING", "true")]))
+            .expect("valid override");
+        assert!(config.verbose_payload_logging);
     }
 
     #[test]

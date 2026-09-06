@@ -100,6 +100,7 @@ fn is_hop_by_hop_header(name: &HeaderName) -> bool {
     )
 }
 
+#[tracing::instrument(skip_all)]
 async fn chat_completions_handler(
     State(state): State<AppState>,
     request: Request,
@@ -121,6 +122,16 @@ async fn chat_completions_handler(
             coerced_count = report.count(),
             coerced_indices = ?report.coerced_indices,
             "coerced mid-conversation system message role(s)"
+        );
+    }
+
+    // Local-debugging-only escape hatch: never enabled against real traffic
+    // (VERBOSE_PAYLOAD_LOGGING defaults to false). Everything above this
+    // point logs only counts/indices/kinds -- never message content.
+    if state.config.verbose_payload_logging {
+        tracing::debug!(
+            rewritten_body = %String::from_utf8_lossy(&rewritten_body),
+            "rewritten request payload (verbose payload logging enabled)"
         );
     }
 
