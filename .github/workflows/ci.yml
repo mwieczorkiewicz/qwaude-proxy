@@ -1,9 +1,10 @@
 name: CI
 
-# Test/lint/audit gate only -- no deploy step. Per team.md's affirmed
-# Testing Posture, "deployment/infrastructure/CI-CD automation is out of
-# scope" refers to deployment/hosting automation specifically; this
-# build-and-check workflow is in-scope project tooling.
+# Test/lint/audit gate, plus a container build+smoke-test+publish job. Per
+# team.md's affirmed Testing Posture, "deployment/infrastructure/CI-CD
+# automation is out of scope" refers to deployment/hosting automation
+# specifically (nothing here deploys the image anywhere); building and
+# publishing the OCI artifact this repo produces is in-scope project tooling.
 
 on:
   push:
@@ -46,3 +47,89 @@ jobs:
       - uses: rustsec/audit-check@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    name: docker build, smoke test, publish
+    runs-on: ubuntu-latest
+    needs: [test, audit]
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Tags/labels are computed unconditionally (needed to name the local
+      # image used by the smoke test below); metadata-action lowercases
+      # `github.repository` automatically, which ghcr.io image refs require.
+      - name: Compute image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      # Compilation coverage: the multi-stage Dockerfile build (Alpine/musl
+      # builder -> scratch runtime) is itself a from-scratch `cargo build
+      # --release`, exercised on every push and PR -- not just the publish
+      # path. `load: true` pulls the built image into the local Docker
+      # daemon so the next step can run it; nothing is pushed yet.
+      - name: Build image (compilation coverage)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      # e2e coverage: run the actual scratch image as a container (no shell,
+      # no package manager inside it -- this is the only way to verify it
+      # actually starts and serves traffic) and hit /health and /metrics
+      # through real HTTP, the same way a deployer would.
+      - name: Smoke test image (e2e coverage)
+        run: |
+          set -euo pipefail
+          image="$(head -n1 <<< "${{ steps.meta.outputs.tags }}")"
+          docker run -d --name smoke -p 8080:8080 \
+            -e VLLM_BASE_URL=http://127.0.0.1:9 \
+            "$image"
+          trap 'docker logs smoke || true; docker rm -f smoke || true' EXIT
+
+          for i in $(seq 1 15); do
+            if curl -sSf http://127.0.0.1:8080/health >/dev/null; then
+              break
+            fi
+            if [ "$i" -eq 15 ]; then
+              echo "container did not become healthy in time" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+
+          curl -sSf http://127.0.0.1:8080/health
+          curl -sSf http://127.0.0.1:8080/metrics >/dev/null
+
+      # Publish only from main, never from a PR (a PR may come from a fork
+      # with no legitimate reason to publish a package under this repo).
+      # Pushes the exact image just smoke-tested above -- no rebuild, so
+      # what's published is provably what was tested.
+      - name: Log in to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && docker push "$tag"
+          done <<< "${{ steps.meta.outputs.tags }}"

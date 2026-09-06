@@ -33,6 +33,28 @@ The proxy listens on `LISTEN_ADDR` (default `0.0.0.0:8080`) and forwards to
 `VLLM_BASE_URL` (default `http://127.0.0.1:8000`). Point Bifrost's outbound
 model URL at this proxy instead of at vLLM directly.
 
+### Container image
+
+Every push to `main` builds and publishes a `scratch`-based image (musl
+static binary, no shell, no package manager — see `Dockerfile`) to GHCR:
+
+```bash
+docker pull ghcr.io/mwieczorkiewicz/qwaude-proxy:latest
+docker run -p 8080:8080 -e VLLM_BASE_URL=http://host.docker.internal:8000 \
+  ghcr.io/mwieczorkiewicz/qwaude-proxy:latest
+```
+
+Configuration is via the same environment variables as `cargo run` (see
+below) — pass them with `-e`. Images are also tagged with the full commit
+SHA (`ghcr.io/mwieczorkiewicz/qwaude-proxy:<sha>`) for pinning to a specific
+build.
+
+To build the image locally:
+
+```bash
+docker build -t qwaude-proxy .
+```
+
 ## Configuration
 
 All configuration is via environment variables; every one has a documented

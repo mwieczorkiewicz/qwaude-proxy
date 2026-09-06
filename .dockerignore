@@ -1,0 +1,7 @@
+# Keeps the build context small and the musl builder's dependency cache
+# stable across runs -- none of this is needed to compile the release binary.
+target/
+.git/
+aidlc/
+.claude/
+*.md
