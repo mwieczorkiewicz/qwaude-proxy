@@ -6,7 +6,7 @@ Anthropic-shaped tool-calling pipeline and vLLM's chat template.
 ## The problem
 
 ```
-Claude Code -> Anthropic-to-OpenAI adapter -> Bifrost (auth/routing) -> [this proxy] -> vLLM (Qwen3.6)
+Claude Code -> Bifrost (auth/routing) -> [this proxy] -> vLLM (Qwen3.6)
 ```
 
 vLLM's chat template raises `raise_exception("System message must be at the
@@ -63,7 +63,7 @@ default and the process runs with no environment variables set at all.
 | Variable | Default | Meaning |
 |---|---|---|
 | `LISTEN_ADDR` | `0.0.0.0:8080` | Address:port the HTTP server binds to. |
-| `VLLM_BASE_URL` | `http://127.0.0.1:8000` | Base URL of the upstream vLLM server; `/v1/chat/completions` is appended. |
+| `VLLM_BASE_URL` | `http://127.0.0.1:8000` | Base URL of the upstream vLLM server; request paths are appended unchanged for passthrough routes. |
 | `NOTICE_PREFIX` | `[System Notification] ` | Prepended to a coerced system message's content. |
 | `LOG_LEVEL` | `info` | `tracing_subscriber::EnvFilter` directive (`trace`/`debug`/`info`/`warn`/`error`, or a per-module directive string). Falls back to `info` if the value doesn't parse as a filter. |
 | `MAX_REQUEST_BODY_SIZE` | `10485760` (10 MiB) | Maximum request body size in bytes; larger bodies get a `413`. |
@@ -77,9 +77,15 @@ upstream credential.
 
 ## Endpoints
 
-- `POST /v1/chat/completions` — the proxy's only real route. Coerces
-  mid-conversation system messages, forwards to vLLM, and streams the
-  response back without buffering it.
+- `POST /v1/chat/completions` — OpenAI-compatible chat. Coerces mid-conversation
+  system messages, forwards to vLLM, streams the response back without buffering.
+- `POST /v1/messages` — Anthropic-compatible messages API (Claude Code via Bifrost
+  `use_anthropic_endpoints`). Same coercion on the `messages` array; forwards
+  `Authorization`, `x-api-key`, `anthropic-version`, and `anthropic-beta` unchanged.
+- `GET /v1/models` — transparent pass-through to vLLM (model listing).
+- `GET /v1/models/{model_id}` — transparent pass-through (model metadata).
+- `POST /v1/completions` — legacy completions API; pass-through (no coercion).
+- `POST /v1/embeddings` — pass-through (no coercion).
 - `GET /health` — returns `200 ok`, independent of any upstream connectivity.
 - `GET /metrics` — Prometheus exposition format. See **Metrics** below.
 

@@ -215,3 +215,90 @@ async fn streaming_response_is_forwarded_incrementally_not_buffered() {
          {expected_total:?} it takes the upstream to finish streaming"
     );
 }
+
+#[tokio::test]
+async fn models_list_is_passthrough() {
+    let mock_server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/models"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "object": "list",
+            "data": [{"id": "qwen3.6-35b-a3b", "object": "model"}],
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let router = common::test_router(mock_server.uri());
+    let request = Request::builder()
+        .method("GET")
+        .uri("/v1/models")
+        .header("authorization", "Bearer test-token")
+        .body(Body::empty())
+        .expect("build request");
+    let response = router.oneshot(request).await.expect("router is infallible");
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = response_json(response).await;
+    assert_eq!(json["data"][0]["id"], "qwen3.6-35b-a3b");
+}
+
+#[tokio::test]
+async fn embeddings_route_is_passthrough_without_coercion() {
+    let mock_server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/embeddings"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "object": "list",
+            "data": [{"object": "embedding", "embedding": [0.1, 0.2]}],
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let router = common::test_router(mock_server.uri());
+    let body = serde_json::json!({
+        "model": "qwen3.6-35b-a3b",
+        "input": "hello",
+    });
+    let request = Request::builder()
+        .method("POST")
+        .uri("/v1/embeddings")
+        .header("content-type", "application/json")
+        .body(Body::from(serde_json::to_vec(&body).expect("serialize")))
+        .expect("build request");
+    let response = router.oneshot(request).await.expect("router is infallible");
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn anthropic_messages_route_coerces_and_forwards() {
+    let mock_server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/messages"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            "id": "msg_test",
+            "type": "message",
+            "role": "assistant",
+            "content": [{"type": "text", "text": "hello"}],
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let router = common::test_router(mock_server.uri());
+    let body = serde_json::json!({
+        "model": "qwen3.6-35b-a3b",
+        "max_tokens": 16,
+        "messages": [
+            {"role": "user", "content": "hi"},
+            {"role": "system", "content": "mid-turn reminder"},
+            {"role": "user", "content": "hai"}
+        ]
+    });
+    let request = Request::builder()
+        .method("POST")
+        .uri("/v1/messages")
+        .header("content-type", "application/json")
+        .header("anthropic-version", "2023-06-01")
+        .body(Body::from(serde_json::to_vec(&body).expect("serialize")))
+        .expect("build request");
+    let response = router.oneshot(request).await.expect("router is infallible");
+    assert_eq!(response.status(), StatusCode::OK);
+}

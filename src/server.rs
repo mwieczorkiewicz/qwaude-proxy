@@ -1,15 +1,9 @@
 //! HTTP routing, request forwarding, and streaming pass-through.
 //!
-//! `POST /v1/chat/completions` is the only route that does real work: it
-//! reads the request body (bounded to `config.max_request_body_size`),
-//! coerces mid-conversation `role: "system"` messages via `transform`,
-//! forwards the rewritten body to `VLLM_BASE_URL` with the inbound
-//! `Authorization` header passed through unchanged, and streams the
-//! upstream's response back to the client without buffering it — the same
-//! `axum::body::Body` wrapping the upstream `hyper` body is used whether the
-//! upstream response is a single JSON object or a chunked SSE stream, so
-//! bytes are relayed to the client as they arrive rather than being
-//! collected first.
+//! `POST /v1/chat/completions` and `POST /v1/messages` coerce mid-conversation
+//! system roles before forwarding. Other OpenAI-compatible routes (model
+//! listing, legacy completions, embeddings) are forwarded transparently with
+//! no body rewrite.
 //!
 //! ## Body-size enforcement note
 //!
@@ -30,7 +24,7 @@ use crate::error::ProxyError;
 use crate::transform;
 use axum::body::Body;
 use axum::extract::{Request, State};
-use axum::http::{header, HeaderName, Request as HttpRequest};
+use axum::http::{header, HeaderMap, HeaderName, Method, Request as HttpRequest};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::Router;
@@ -77,6 +71,14 @@ impl AppState {
 pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/v1/chat/completions", post(chat_completions_handler))
+        .route("/v1/messages", post(messages_handler))
+        .route("/v1/models", get(transparent_handler).head(transparent_handler))
+        .route(
+            "/v1/models/{model_id}",
+            get(transparent_handler).head(transparent_handler),
+        )
+        .route("/v1/completions", post(transparent_handler))
+        .route("/v1/embeddings", post(transparent_handler))
         .route("/health", get(health_handler))
         .route("/metrics", get(metrics_handler))
         .with_state(state)
@@ -111,15 +113,41 @@ fn is_hop_by_hop_header(name: &HeaderName) -> bool {
     )
 }
 
+async fn chat_completions_handler(State(state): State<AppState>, request: Request) -> Response {
+    proxy_handler(&state, request, "/v1/chat/completions").await
+}
+
+async fn messages_handler(State(state): State<AppState>, request: Request) -> Response {
+    proxy_handler(&state, request, "/v1/messages").await
+}
+
+async fn transparent_handler(State(state): State<AppState>, request: Request) -> Response {
+    transparent_proxy_handler(&state, request).await
+}
+
+/// Transparent pass-through: same method, path, query, headers, and body.
+async fn transparent_proxy_handler(state: &AppState, request: Request) -> Response {
+    let start = Instant::now();
+    let result = handle_transparent_forward(state, request).await;
+    finish_handler_response(start, result)
+}
+
 /// The actual axum route handler: records `proxy_requests_total` (labeled
 /// by final status) and `proxy_request_duration_seconds` around
-/// [`handle_chat_completions`] regardless of outcome, then converts its
+/// [`handle_coerced_forward`] regardless of outcome, then converts its
 /// `Result` into a `Response` (via `ProxyError`'s own `IntoResponse` impl on
 /// the error path).
-#[tracing::instrument(skip_all)]
-async fn chat_completions_handler(State(state): State<AppState>, request: Request) -> Response {
+#[tracing::instrument(skip_all, fields(upstream_path = upstream_path))]
+async fn proxy_handler(state: &AppState, request: Request, upstream_path: &str) -> Response {
     let start = Instant::now();
-    let result = handle_chat_completions(&state, request).await;
+    let result = handle_coerced_forward(state, request, upstream_path).await;
+    finish_handler_response(start, result)
+}
+
+fn finish_handler_response(
+    start: Instant,
+    result: Result<Response, ProxyError>,
+) -> Response {
     let elapsed = start.elapsed();
 
     let status = match &result {
@@ -145,13 +173,132 @@ async fn chat_completions_handler(State(state): State<AppState>, request: Reques
     }
 }
 
-async fn handle_chat_completions(
+fn is_request_hop_by_hop_header(name: &HeaderName) -> bool {
+    matches!(
+        name.as_str(),
+        "connection"
+            | "keep-alive"
+            | "proxy-authenticate"
+            | "proxy-authorization"
+            | "te"
+            | "trailers"
+            | "transfer-encoding"
+            | "upgrade"
+            | "host"
+    )
+}
+
+fn apply_inbound_headers(
+    inbound: &HeaderMap,
+    mut builder: hyper::http::request::Builder,
+) -> hyper::http::request::Builder {
+    for (name, value) in inbound.iter() {
+        if is_request_hop_by_hop_header(name) {
+            continue;
+        }
+        builder = builder.header(name, value);
+    }
+    builder
+}
+
+async fn send_upstream_request(
+    state: &AppState,
+    outbound_request: HttpRequest<Body>,
+) -> Result<Response, ProxyError> {
+    let upstream_response = tokio::time::timeout(
+        state.config.total_timeout,
+        state.client.request(outbound_request),
+    )
+    .await
+    .map_err(|_| ProxyError::UpstreamTimeout)?
+    .map_err(|err| {
+        tracing::error!(error = %err, "upstream connection failed");
+        ProxyError::UpstreamConnectFailed
+    })?;
+
+    if !upstream_response.status().is_success() {
+        metrics::counter!(crate::metrics::UPSTREAM_ERRORS_TOTAL, "kind" => "non_2xx").increment(1);
+    }
+
+    upstream_response_to_response(upstream_response)
+}
+
+fn upstream_response_to_response(
+    upstream_response: hyper::Response<hyper::body::Incoming>,
+) -> Result<Response, ProxyError> {
+    let (parts, upstream_body) = upstream_response.into_parts();
+    let mut response_builder = Response::builder().status(parts.status);
+    for (name, value) in parts.headers.iter() {
+        if is_hop_by_hop_header(name) {
+            continue;
+        }
+        response_builder = response_builder.header(name.clone(), value.clone());
+    }
+
+    response_builder
+        .body(Body::new(upstream_body))
+        .map_err(|_| ProxyError::Internal)
+}
+
+async fn handle_transparent_forward(
     state: &AppState,
     request: Request,
 ) -> Result<Response, ProxyError> {
-    let authorization = request.headers().get(header::AUTHORIZATION).cloned();
+    let (parts, body) = request.into_parts();
+    let path_and_query = parts
+        .uri
+        .path_and_query()
+        .map(|pq| pq.as_str())
+        .unwrap_or("/");
+    let upstream_uri = format!(
+        "{}{}",
+        state.config.vllm_base_url.trim_end_matches('/'),
+        path_and_query
+    );
 
-    let limited_body = Limited::new(request.into_body(), state.config.max_request_body_size);
+    let outbound_body = if parts.method == Method::GET || parts.method == Method::HEAD {
+        Body::empty()
+    } else {
+        let limited_body = Limited::new(body, state.config.max_request_body_size);
+        let collected = limited_body
+            .collect()
+            .await
+            .map_err(|_| ProxyError::BodyTooLarge)?;
+        Body::from(collected.to_bytes())
+    };
+
+    let outbound_builder = apply_inbound_headers(
+        &parts.headers,
+        HttpRequest::builder().method(parts.method).uri(&upstream_uri),
+    );
+    let outbound_request = outbound_builder
+        .body(outbound_body)
+        .map_err(|_| ProxyError::Internal)?;
+
+    send_upstream_request(state, outbound_request).await
+}
+
+async fn handle_coerced_forward(
+    state: &AppState,
+    request: Request,
+    upstream_path: &str,
+) -> Result<Response, ProxyError> {
+    let (parts, body) = request.into_parts();
+    let authorization = parts.headers.get(header::AUTHORIZATION).cloned();
+    let x_api_key = parts
+        .headers
+        .get(HeaderName::from_static("x-api-key"))
+        .cloned();
+    let anthropic_version = parts
+        .headers
+        .get(HeaderName::from_static("anthropic-version"))
+        .cloned();
+    let anthropic_beta = parts
+        .headers
+        .get(HeaderName::from_static("anthropic-beta"))
+        .cloned();
+
+    let limited_body = Limited::new(body, state.config.max_request_body_size);
     let collected = limited_body
         .collect()
         .await
@@ -181,8 +328,9 @@ async fn handle_chat_completions(
     }
 
     let upstream_uri = format!(
-        "{}/v1/chat/completions",
-        state.config.vllm_base_url.trim_end_matches('/')
+        "{}{}",
+        state.config.vllm_base_url.trim_end_matches('/'),
+        upstream_path
     );
 
     let mut outbound_builder = HttpRequest::builder()
@@ -192,43 +340,18 @@ async fn handle_chat_completions(
     if let Some(auth) = authorization {
         outbound_builder = outbound_builder.header(header::AUTHORIZATION, auth);
     }
+    if let Some(key) = x_api_key {
+        outbound_builder = outbound_builder.header("x-api-key", key);
+    }
+    if let Some(version) = anthropic_version {
+        outbound_builder = outbound_builder.header("anthropic-version", version);
+    }
+    if let Some(beta) = anthropic_beta {
+        outbound_builder = outbound_builder.header("anthropic-beta", beta);
+    }
     let outbound_request = outbound_builder
         .body(Body::from(rewritten_body))
         .map_err(|_| ProxyError::Internal)?;
 
-    // Bounded until the response *headers* arrive (hyper's `.request()`
-    // resolves as soon as the head is received, before the body is read),
-    // not for the duration of the body — a streaming response is therefore
-    // only bounded until its first byte, per NFR4.1.
-    let upstream_response = tokio::time::timeout(
-        state.config.total_timeout,
-        state.client.request(outbound_request),
-    )
-    .await
-    .map_err(|_| ProxyError::UpstreamTimeout)?
-    .map_err(|err| {
-        tracing::error!(error = %err, "upstream connection failed");
-        ProxyError::UpstreamConnectFailed
-    })?;
-
-    if !upstream_response.status().is_success() {
-        // A non-2xx upstream response is not a ProxyError -- it is still
-        // passed through to the client verbatim, per FR4 -- but it is
-        // still worth surfacing in proxy_upstream_errors_total{kind="non_2xx"}
-        // for operational visibility.
-        metrics::counter!(crate::metrics::UPSTREAM_ERRORS_TOTAL, "kind" => "non_2xx").increment(1);
-    }
-
-    let (parts, upstream_body) = upstream_response.into_parts();
-    let mut response_builder = Response::builder().status(parts.status);
-    for (name, value) in parts.headers.iter() {
-        if is_hop_by_hop_header(name) {
-            continue;
-        }
-        response_builder = response_builder.header(name.clone(), value.clone());
-    }
-
-    response_builder
-        .body(Body::new(upstream_body))
-        .map_err(|_| ProxyError::Internal)
+    send_upstream_request(state, outbound_request).await
 }
