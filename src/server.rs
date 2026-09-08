@@ -72,7 +72,10 @@ pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/v1/chat/completions", post(chat_completions_handler))
         .route("/v1/messages", post(messages_handler))
-        .route("/v1/models", get(transparent_handler).head(transparent_handler))
+        .route(
+            "/v1/models",
+            get(transparent_handler).head(transparent_handler),
+        )
         .route(
             "/v1/models/{model_id}",
             get(transparent_handler).head(transparent_handler),
@@ -144,10 +147,7 @@ async fn proxy_handler(state: &AppState, request: Request, upstream_path: &str) 
     finish_handler_response(start, result)
 }
 
-fn finish_handler_response(
-    start: Instant,
-    result: Result<Response, ProxyError>,
-) -> Response {
+fn finish_handler_response(start: Instant, result: Result<Response, ProxyError>) -> Response {
     let elapsed = start.elapsed();
 
     let status = match &result {
@@ -269,7 +269,9 @@ async fn handle_transparent_forward(
 
     let outbound_builder = apply_inbound_headers(
         &parts.headers,
-        HttpRequest::builder().method(parts.method).uri(&upstream_uri),
+        HttpRequest::builder()
+            .method(parts.method)
+            .uri(&upstream_uri),
     );
     let outbound_request = outbound_builder
         .body(outbound_body)
