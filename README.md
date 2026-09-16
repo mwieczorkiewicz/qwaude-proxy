@@ -19,7 +19,8 @@ reminders, policy nudges), which vLLM's tokenizer then rejects outright.
 request just enough to avoid that: it leaves `messages[0]` alone, and for
 every *other* message whose `role` is `"system"`, it rewrites `role` to
 `"user"` and prepends a configurable notice prefix to that message's
-content. Nothing else about the request is touched, and non-streaming
+content. It can also inject a default `thinking_token_budget` on chat-completion
+requests when clients omit it (see `DEFAULT_THINKING_TOKEN_BUDGET`). Non-streaming
 responses, streaming responses, and error conditions from vLLM are all
 passed straight through.
 
@@ -70,6 +71,7 @@ default and the process runs with no environment variables set at all.
 | `UPSTREAM_CONNECT_TIMEOUT_SECS` | `5` | Seconds to wait for the TCP connect to `VLLM_BASE_URL` before failing with a `502`. |
 | `UPSTREAM_TOTAL_TIMEOUT_SECS` | `30` | Seconds to wait for the upstream response *headers* (not the full body) before failing with a `504`. A streaming response is therefore only bounded until its first byte, never for the duration of the stream. |
 | `VERBOSE_PAYLOAD_LOGGING` | `false` | When `true`, additionally logs the rewritten request body at `debug`. Local debugging only — never enable this against real traffic. |
+| `DEFAULT_THINKING_TOKEN_BUDGET` | `4096` | On `POST /v1/chat/completions`, inject `thinking_token_budget` when the client omits it (or sends JSON `null`). Set to `0` to disable. Client-provided values are never overwritten. |
 
 The inbound `Authorization` header, if present, is forwarded to
 `VLLM_BASE_URL` unchanged; the proxy holds no separately configured

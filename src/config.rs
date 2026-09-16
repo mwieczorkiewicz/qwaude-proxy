@@ -24,6 +24,10 @@ pub const DEFAULT_TOTAL_TIMEOUT_SECS: u64 = 30;
 /// additionally logs request/response payload content at `debug`, for local
 /// debugging only; never enable this against real traffic.
 pub const DEFAULT_VERBOSE_PAYLOAD_LOGGING: bool = false;
+/// `DEFAULT_THINKING_TOKEN_BUDGET` — when set to a positive integer, inject
+/// `thinking_token_budget` on `POST /v1/chat/completions` if the client omits
+/// it. Set to `0` to disable injection.
+pub const DEFAULT_THINKING_TOKEN_BUDGET: u64 = 4096;
 
 /// Fully resolved runtime configuration for one proxy process.
 #[derive(Debug, Clone, PartialEq)]
@@ -36,6 +40,9 @@ pub struct ProxyConfig {
     pub connect_timeout: Duration,
     pub total_timeout: Duration,
     pub verbose_payload_logging: bool,
+    /// When `Some(n)`, inject `thinking_token_budget: n` on chat completions
+    /// requests that do not already set the field. `None` disables injection.
+    pub default_thinking_token_budget: Option<u64>,
 }
 
 /// A single invalid environment variable value.
@@ -106,6 +113,9 @@ impl ProxyConfig {
             "VERBOSE_PAYLOAD_LOGGING",
             "must be `true` or `false`",
         )?;
+        let default_thinking_token_budget = parse_thinking_token_budget(
+            source.get("DEFAULT_THINKING_TOKEN_BUDGET"),
+        )?;
 
         Ok(Self {
             listen_addr,
@@ -116,7 +126,22 @@ impl ProxyConfig {
             connect_timeout: Duration::from_secs(connect_timeout_secs),
             total_timeout: Duration::from_secs(total_timeout_secs),
             verbose_payload_logging,
+            default_thinking_token_budget,
         })
+    }
+}
+
+fn parse_thinking_token_budget(raw: Option<String>) -> Result<Option<u64>, ConfigError> {
+    match raw {
+        None => Ok(Some(DEFAULT_THINKING_TOKEN_BUDGET)),
+        Some(value) => {
+            let parsed = value.parse::<u64>().map_err(|_| ConfigError {
+                var: "DEFAULT_THINKING_TOKEN_BUDGET",
+                value,
+                reason: "must be a non-negative integer",
+            })?;
+            Ok(if parsed == 0 { None } else { Some(parsed) })
+        }
     }
 }
 
@@ -175,6 +200,10 @@ mod tests {
             config.verbose_payload_logging,
             DEFAULT_VERBOSE_PAYLOAD_LOGGING
         );
+        assert_eq!(
+            config.default_thinking_token_budget,
+            Some(DEFAULT_THINKING_TOKEN_BUDGET)
+        );
     }
 
     #[test]
@@ -229,6 +258,30 @@ mod tests {
         .expect("valid override");
         assert_eq!(config.connect_timeout, Duration::from_secs(1));
         assert_eq!(config.total_timeout, Duration::from_secs(60));
+    }
+
+    #[test]
+    fn thinking_token_budget_defaults_to_4096() {
+        let config = ProxyConfig::resolve(&fake_env(&[])).expect("defaults are valid");
+        assert_eq!(config.default_thinking_token_budget, Some(4096));
+    }
+
+    #[test]
+    fn thinking_token_budget_zero_disables_injection() {
+        let config =
+            ProxyConfig::resolve(&fake_env(&[("DEFAULT_THINKING_TOKEN_BUDGET", "0")])).expect(
+                "valid override",
+            );
+        assert_eq!(config.default_thinking_token_budget, None);
+    }
+
+    #[test]
+    fn thinking_token_budget_is_overridable() {
+        let config =
+            ProxyConfig::resolve(&fake_env(&[("DEFAULT_THINKING_TOKEN_BUDGET", "8192")])).expect(
+                "valid override",
+            );
+        assert_eq!(config.default_thinking_token_budget, Some(8192));
     }
 
     #[test]

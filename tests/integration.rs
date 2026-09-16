@@ -11,6 +11,7 @@ use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use std::time::{Duration, Instant};
 use tower::ServiceExt;
+use serde_json::json;
 use wiremock::matchers::{header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -54,6 +55,29 @@ async fn non_streaming_response_round_trips_verbatim() {
     let body = response_json(response).await;
     assert_eq!(body["id"], "chatcmpl-test");
     assert_eq!(body["choices"][0]["message"]["content"], "hello");
+}
+
+#[tokio::test]
+async fn default_thinking_token_budget_is_forwarded_to_upstream() {
+    let mock_server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .and(wiremock::matchers::body_json(json!({
+            "model": "qwen",
+            "stream": false,
+            "thinking_token_budget": 4096,
+            "messages": [
+                {"role": "user", "content": "hi"},
+                {"role": "user", "content": "[System Notification] reminder"},
+            ],
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
+        .mount(&mock_server)
+        .await;
+
+    let router = common::test_router_with_thinking_budget(mock_server.uri(), Some(4096));
+    let response = post_json(router, common::sample_request_body(false)).await;
+    assert_eq!(response.status(), StatusCode::OK);
 }
 
 #[tokio::test]

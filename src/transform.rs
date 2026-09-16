@@ -54,7 +54,7 @@
 //! for the measured allocation/latency cost against a naive baseline.
 
 use serde::de::Error as _;
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::sync::OnceLock;
 
 /// Role value that must never appear at any message index other than 0.
@@ -77,6 +77,19 @@ impl CoercionReport {
 
     pub fn is_empty(&self) -> bool {
         self.coerced_indices.is_empty()
+    }
+}
+
+/// Combined report for chat-completion request preparation (coercion + defaults).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PrepareReport {
+    pub coercion: CoercionReport,
+    pub thinking_budget_injected: bool,
+}
+
+impl PrepareReport {
+    pub fn is_empty(&self) -> bool {
+        self.coercion.is_empty() && !self.thinking_budget_injected
     }
 }
 
@@ -126,15 +139,53 @@ pub fn coerce_system_messages(
     body: &[u8],
     notice_prefix: &str,
 ) -> Result<(Vec<u8>, CoercionReport), TransformError> {
+    let (out, report) = prepare_chat_completion_request(body, notice_prefix, None)?;
+    Ok((out, report.coercion))
+}
+
+/// Prepare a chat-completion request for upstream vLLM: coerce mid-stream
+/// system roles and optionally inject a default `thinking_token_budget` when
+/// the client did not set one.
+pub fn prepare_chat_completion_request(
+    body: &[u8],
+    notice_prefix: &str,
+    default_thinking_token_budget: Option<u64>,
+) -> Result<(Vec<u8>, PrepareReport), TransformError> {
     let mut value: Value = parse_request_value(body)?;
     let obj = value.as_object_mut().ok_or(TransformError::NotAnObject)?;
     let messages = obj
         .get_mut("messages")
         .and_then(Value::as_array_mut)
         .ok_or(TransformError::MissingMessagesArray)?;
-    let report = coerce_messages(messages, notice_prefix);
+    let coercion = coerce_messages(messages, notice_prefix);
+    let thinking_budget_injected =
+        inject_default_thinking_token_budget(obj, default_thinking_token_budget);
     let out = serde_json::to_vec(&value)?;
-    Ok((out, report))
+    Ok((
+        out,
+        PrepareReport {
+            coercion,
+            thinking_budget_injected,
+        },
+    ))
+}
+
+/// Insert `thinking_token_budget` when `budget` is set and the client omitted
+/// the field (or sent JSON `null`). Returns whether injection occurred.
+fn inject_default_thinking_token_budget(obj: &mut Map<String, Value>, budget: Option<u64>) -> bool {
+    let Some(budget) = budget else {
+        return false;
+    };
+    match obj.get("thinking_token_budget") {
+        None | Some(Value::Null) => {
+            obj.insert(
+                "thinking_token_budget".to_string(),
+                Value::Number(serde_json::Number::from(budget)),
+            );
+            true
+        }
+        Some(_) => false,
+    }
 }
 
 /// Whether this process should attempt the simd-json parse path at all.
@@ -392,6 +443,38 @@ mod tests {
     fn byte_level_entry_point_rejects_invalid_json() {
         let err = coerce_system_messages(b"not json", ">> ").unwrap_err();
         assert!(matches!(err, TransformError::InvalidJson(_)));
+    }
+
+    #[test]
+    fn default_thinking_budget_is_injected_when_absent() {
+        let body = br#"{"model":"qwen","messages":[{"role":"user","content":"hi"}]}"#;
+        let (out, report) =
+            prepare_chat_completion_request(body, "[N] ", Some(4096)).expect("valid json");
+        assert!(report.thinking_budget_injected);
+        let value: Value = serde_json::from_slice(&out).expect("output is valid json");
+        assert_eq!(value["thinking_token_budget"], json!(4096));
+    }
+
+    #[test]
+    fn default_thinking_budget_is_not_injected_when_client_sets_it() {
+        let body =
+            br#"{"model":"qwen","thinking_token_budget":128,"messages":[{"role":"user","content":"hi"}]}"#;
+        let (out, report) =
+            prepare_chat_completion_request(body, "[N] ", Some(4096)).expect("valid json");
+        assert!(!report.thinking_budget_injected);
+        let value: Value = serde_json::from_slice(&out).expect("output is valid json");
+        assert_eq!(value["thinking_token_budget"], json!(128));
+    }
+
+    #[test]
+    fn default_thinking_budget_replaces_json_null() {
+        let body =
+            br#"{"model":"qwen","thinking_token_budget":null,"messages":[{"role":"user","content":"hi"}]}"#;
+        let (out, report) =
+            prepare_chat_completion_request(body, "[N] ", Some(4096)).expect("valid json");
+        assert!(report.thinking_budget_injected);
+        let value: Value = serde_json::from_slice(&out).expect("output is valid json");
+        assert_eq!(value["thinking_token_budget"], json!(4096));
     }
 
     // ---------------------------------------------------------------

@@ -31,6 +31,7 @@ pub fn test_config(vllm_base_url: String) -> ProxyConfig {
         connect_timeout: Duration::from_millis(500),
         total_timeout: Duration::from_secs(2),
         verbose_payload_logging: false,
+        default_thinking_token_budget: None,
     }
 }
 
@@ -38,6 +39,15 @@ pub fn test_config(vllm_base_url: String) -> ProxyConfig {
 /// integration tests.
 pub fn test_router(vllm_base_url: String) -> axum::Router {
     build_router(AppState::new(test_config(vllm_base_url)))
+}
+
+pub fn test_router_with_thinking_budget(
+    vllm_base_url: String,
+    default_thinking_token_budget: Option<u64>,
+) -> axum::Router {
+    let mut config = test_config(vllm_base_url);
+    config.default_thinking_token_budget = default_thinking_token_budget;
+    build_router(AppState::new(config))
 }
 
 /// A minimal, valid chat-completion request body: a leading user message

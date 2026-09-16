@@ -307,16 +307,27 @@ async fn handle_coerced_forward(
         .map_err(|_| ProxyError::BodyTooLarge)?;
     let body_bytes = collected.to_bytes();
 
-    let (rewritten_body, report) =
-        transform::coerce_system_messages(&body_bytes, &state.config.notice_prefix)?;
+    let (rewritten_body, report) = transform::prepare_chat_completion_request(
+        &body_bytes,
+        &state.config.notice_prefix,
+        state.config.default_thinking_token_budget,
+    )?;
 
-    if !report.is_empty() {
+    if !report.coercion.is_empty() {
         tracing::debug!(
-            coerced_count = report.count(),
-            coerced_indices = ?report.coerced_indices,
+            coerced_count = report.coercion.count(),
+            coerced_indices = ?report.coercion.coerced_indices,
             "coerced mid-conversation system message role(s)"
         );
-        metrics::counter!(crate::metrics::MESSAGES_COERCED_TOTAL).increment(report.count() as u64);
+        metrics::counter!(crate::metrics::MESSAGES_COERCED_TOTAL)
+            .increment(report.coercion.count() as u64);
+    }
+    if report.thinking_budget_injected {
+        tracing::debug!(
+            budget = state.config.default_thinking_token_budget,
+            "injected default thinking_token_budget"
+        );
+        metrics::counter!(crate::metrics::THINKING_BUDGET_INJECTED_TOTAL).increment(1);
     }
 
     // Local-debugging-only escape hatch: never enabled against real traffic
