@@ -113,9 +113,8 @@ impl ProxyConfig {
             "VERBOSE_PAYLOAD_LOGGING",
             "must be `true` or `false`",
         )?;
-        let default_thinking_token_budget = parse_thinking_token_budget(
-            source.get("DEFAULT_THINKING_TOKEN_BUDGET"),
-        )?;
+        let default_thinking_token_budget =
+            parse_thinking_token_budget(source.get("DEFAULT_THINKING_TOKEN_BUDGET"))?;
 
         Ok(Self {
             listen_addr,
@@ -268,19 +267,15 @@ mod tests {
 
     #[test]
     fn thinking_token_budget_zero_disables_injection() {
-        let config =
-            ProxyConfig::resolve(&fake_env(&[("DEFAULT_THINKING_TOKEN_BUDGET", "0")])).expect(
-                "valid override",
-            );
+        let config = ProxyConfig::resolve(&fake_env(&[("DEFAULT_THINKING_TOKEN_BUDGET", "0")]))
+            .expect("valid override");
         assert_eq!(config.default_thinking_token_budget, None);
     }
 
     #[test]
     fn thinking_token_budget_is_overridable() {
-        let config =
-            ProxyConfig::resolve(&fake_env(&[("DEFAULT_THINKING_TOKEN_BUDGET", "8192")])).expect(
-                "valid override",
-            );
+        let config = ProxyConfig::resolve(&fake_env(&[("DEFAULT_THINKING_TOKEN_BUDGET", "8192")]))
+            .expect("valid override");
         assert_eq!(config.default_thinking_token_budget, Some(8192));
     }
 
