@@ -1,5 +1,10 @@
 //! Runtime configuration, resolved from environment variables with documented defaults.
 
+use crate::param_patches::RequestParamPatches;
+use crate::param_patches_config::{
+    parse_request_param_patches, ENV_REQUEST_PARAM_PATCHES_ENABLED, ENV_REQUEST_PARAM_PATCHES_JSON,
+    ENV_REQUEST_PARAM_PATCHES_MODE, ENV_REQUEST_PARAM_PATCHES_PRESET,
+};
 use std::env;
 use std::time::Duration;
 
@@ -43,6 +48,8 @@ pub struct ProxyConfig {
     /// When `Some(n)`, inject `thinking_token_budget: n` on chat completions
     /// requests that do not already set the field. `None` disables injection.
     pub default_thinking_token_budget: Option<u64>,
+    /// Optional chat-completion field patches (feature-flagged via env).
+    pub request_param_patches: Option<RequestParamPatches>,
 }
 
 /// A single invalid environment variable value.
@@ -52,6 +59,12 @@ pub struct ConfigError {
     var: &'static str,
     value: String,
     reason: &'static str,
+}
+
+impl ConfigError {
+    pub(crate) fn invalid(var: &'static str, value: String, reason: &'static str) -> Self {
+        Self { var, value, reason }
+    }
 }
 
 /// Abstraction over "a source of named string values", so config resolution
@@ -115,6 +128,12 @@ impl ProxyConfig {
         )?;
         let default_thinking_token_budget =
             parse_thinking_token_budget(source.get("DEFAULT_THINKING_TOKEN_BUDGET"))?;
+        let request_param_patches = parse_request_param_patches(
+            source.get(ENV_REQUEST_PARAM_PATCHES_ENABLED),
+            source.get(ENV_REQUEST_PARAM_PATCHES_MODE),
+            source.get(ENV_REQUEST_PARAM_PATCHES_PRESET),
+            source.get(ENV_REQUEST_PARAM_PATCHES_JSON),
+        )?;
 
         Ok(Self {
             listen_addr,
@@ -126,6 +145,7 @@ impl ProxyConfig {
             total_timeout: Duration::from_secs(total_timeout_secs),
             verbose_payload_logging,
             default_thinking_token_budget,
+            request_param_patches,
         })
     }
 }
@@ -203,6 +223,7 @@ mod tests {
             config.default_thinking_token_budget,
             Some(DEFAULT_THINKING_TOKEN_BUDGET)
         );
+        assert!(config.request_param_patches.is_none());
     }
 
     #[test]

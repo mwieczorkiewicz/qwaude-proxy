@@ -15,6 +15,8 @@ pub const REQUEST_DURATION_SECONDS: &str = "proxy_request_duration_seconds";
 pub const MESSAGES_COERCED_TOTAL: &str = "proxy_messages_coerced_total";
 /// Chat-completion requests where a default `thinking_token_budget` was injected.
 pub const THINKING_BUDGET_INJECTED_TOTAL: &str = "proxy_thinking_budget_injected_total";
+/// Chat-completion request fields written by `REQUEST_PARAM_PATCHES_*` (count only).
+pub const REQUEST_PARAM_FIELDS_PATCHED_TOTAL: &str = "proxy_request_param_fields_patched_total";
 /// Upstream failure volume, labeled by cause (`kind`): `connect_timeout`,
 /// `request_timeout`, or `non_2xx`, per
 /// `nfr-design/observability-design.md` NFR5.3.

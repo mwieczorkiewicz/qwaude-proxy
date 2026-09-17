@@ -53,6 +53,7 @@
 //! see `README.md`'s Performance section and `benches/transform_bench.rs`
 //! for the measured allocation/latency cost against a naive baseline.
 
+use crate::param_patches::{apply_request_param_patches, RequestParamPatches};
 use serde::de::Error as _;
 use serde_json::{Map, Value};
 use std::sync::OnceLock;
@@ -85,11 +86,14 @@ impl CoercionReport {
 pub struct PrepareReport {
     pub coercion: CoercionReport,
     pub thinking_budget_injected: bool,
+    pub request_param_fields_patched: u32,
 }
 
 impl PrepareReport {
     pub fn is_empty(&self) -> bool {
-        self.coercion.is_empty() && !self.thinking_budget_injected
+        self.coercion.is_empty()
+            && !self.thinking_budget_injected
+            && self.request_param_fields_patched == 0
     }
 }
 
@@ -139,7 +143,7 @@ pub fn coerce_system_messages(
     body: &[u8],
     notice_prefix: &str,
 ) -> Result<(Vec<u8>, CoercionReport), TransformError> {
-    let (out, report) = prepare_chat_completion_request(body, notice_prefix, None)?;
+    let (out, report) = prepare_chat_completion_request(body, notice_prefix, None, None)?;
     Ok((out, report.coercion))
 }
 
@@ -150,6 +154,7 @@ pub fn prepare_chat_completion_request(
     body: &[u8],
     notice_prefix: &str,
     default_thinking_token_budget: Option<u64>,
+    request_param_patches: Option<&RequestParamPatches>,
 ) -> Result<(Vec<u8>, PrepareReport), TransformError> {
     let mut value: Value = parse_request_value(body)?;
     let obj = value.as_object_mut().ok_or(TransformError::NotAnObject)?;
@@ -160,12 +165,17 @@ pub fn prepare_chat_completion_request(
     let coercion = coerce_messages(messages, notice_prefix);
     let thinking_budget_injected =
         inject_default_thinking_token_budget(obj, default_thinking_token_budget);
+    let request_param_fields_patched = request_param_patches
+        .filter(|p| !p.is_empty())
+        .map(|p| apply_request_param_patches(obj, p))
+        .unwrap_or(0);
     let out = serde_json::to_vec(&value)?;
     Ok((
         out,
         PrepareReport {
             coercion,
             thinking_budget_injected,
+            request_param_fields_patched,
         },
     ))
 }
@@ -449,7 +459,7 @@ mod tests {
     fn default_thinking_budget_is_injected_when_absent() {
         let body = br#"{"model":"qwen","messages":[{"role":"user","content":"hi"}]}"#;
         let (out, report) =
-            prepare_chat_completion_request(body, "[N] ", Some(4096)).expect("valid json");
+            prepare_chat_completion_request(body, "[N] ", Some(4096), None).expect("valid json");
         assert!(report.thinking_budget_injected);
         let value: Value = serde_json::from_slice(&out).expect("output is valid json");
         assert_eq!(value["thinking_token_budget"], json!(4096));
@@ -460,10 +470,27 @@ mod tests {
         let body =
             br#"{"model":"qwen","thinking_token_budget":128,"messages":[{"role":"user","content":"hi"}]}"#;
         let (out, report) =
-            prepare_chat_completion_request(body, "[N] ", Some(4096)).expect("valid json");
+            prepare_chat_completion_request(body, "[N] ", Some(4096), None).expect("valid json");
         assert!(!report.thinking_budget_injected);
         let value: Value = serde_json::from_slice(&out).expect("output is valid json");
         assert_eq!(value["thinking_token_budget"], json!(128));
+    }
+
+    #[test]
+    fn thinking_mode_param_patches_apply_in_always_mode() {
+        use crate::param_patches::{thinking_mode_sampling_preset, PatchMode, RequestParamPatches};
+        let patches = RequestParamPatches {
+            mode: PatchMode::Always,
+            fields: thinking_mode_sampling_preset(),
+        };
+        let body =
+            br#"{"model":"qwen","messages":[{"role":"user","content":"hi"}],"temperature":0.1}"#;
+        let (out, report) =
+            prepare_chat_completion_request(body, "[N] ", None, Some(&patches)).expect("valid");
+        assert!(report.request_param_fields_patched > 0);
+        let value: Value = serde_json::from_slice(&out).expect("json");
+        assert_eq!(value["temperature"], json!(0.6));
+        assert_eq!(value["top_p"], json!(0.95));
     }
 
     #[test]
@@ -471,7 +498,7 @@ mod tests {
         let body =
             br#"{"model":"qwen","thinking_token_budget":null,"messages":[{"role":"user","content":"hi"}]}"#;
         let (out, report) =
-            prepare_chat_completion_request(body, "[N] ", Some(4096)).expect("valid json");
+            prepare_chat_completion_request(body, "[N] ", Some(4096), None).expect("valid json");
         assert!(report.thinking_budget_injected);
         let value: Value = serde_json::from_slice(&out).expect("output is valid json");
         assert_eq!(value["thinking_token_budget"], json!(4096));

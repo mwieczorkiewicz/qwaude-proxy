@@ -311,6 +311,7 @@ async fn handle_coerced_forward(
         &body_bytes,
         &state.config.notice_prefix,
         state.config.default_thinking_token_budget,
+        state.config.request_param_patches.as_ref(),
     )?;
 
     if !report.coercion.is_empty() {
@@ -328,6 +329,14 @@ async fn handle_coerced_forward(
             "injected default thinking_token_budget"
         );
         metrics::counter!(crate::metrics::THINKING_BUDGET_INJECTED_TOTAL).increment(1);
+    }
+    if report.request_param_fields_patched > 0 {
+        tracing::debug!(
+            fields_patched = report.request_param_fields_patched,
+            "applied request param patches"
+        );
+        metrics::counter!(crate::metrics::REQUEST_PARAM_FIELDS_PATCHED_TOTAL)
+            .increment(report.request_param_fields_patched as u64);
     }
 
     // Local-debugging-only escape hatch: never enabled against real traffic

@@ -72,6 +72,18 @@ default and the process runs with no environment variables set at all.
 | `UPSTREAM_TOTAL_TIMEOUT_SECS` | `30` | Seconds to wait for the upstream response *headers* (not the full body) before failing with a `504`. A streaming response is therefore only bounded until its first byte, never for the duration of the stream. |
 | `VERBOSE_PAYLOAD_LOGGING` | `false` | When `true`, additionally logs the rewritten request body at `debug`. Local debugging only — never enable this against real traffic. |
 | `DEFAULT_THINKING_TOKEN_BUDGET` | `4096` | On `POST /v1/chat/completions`, inject `thinking_token_budget` when the client omits it (or sends JSON `null`). Set to `0` to disable. Client-provided values are never overwritten. |
+| `REQUEST_PARAM_PATCHES_ENABLED` | `false` | When `true`, merge configured fields into `POST /v1/chat/completions` JSON before vLLM (sampling params, etc.). |
+| `REQUEST_PARAM_PATCHES_MODE` | `if_absent` | `if_absent` — only fill missing/`null` keys; `always` — overwrite client values (forced defaults). |
+| `REQUEST_PARAM_PATCHES_PRESET` | *(unset)* | Built-in patch sets. `thinking-mode` matches Demo Room GitOps `thinking-mode-sampling` (`temperature`, `top_p`, `top_k`, `min_p`, `presence_penalty`, `repetition_penalty`). |
+| `REQUEST_PARAM_PATCHES_JSON` | *(unset)* | Optional JSON object merged on top of the preset (e.g. `{"temperature":0.7}`). |
+
+Example — apply thinking-mode sampling at the proxy (same values as vLLM `--override-generation-config.*`):
+
+```bash
+export REQUEST_PARAM_PATCHES_ENABLED=true
+export REQUEST_PARAM_PATCHES_PRESET=thinking-mode
+export REQUEST_PARAM_PATCHES_MODE=always   # or if_absent to let clients override
+```
 
 The inbound `Authorization` header, if present, is forwarded to
 `VLLM_BASE_URL` unchanged; the proxy holds no separately configured

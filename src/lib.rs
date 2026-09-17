@@ -8,6 +8,8 @@ pub mod config;
 pub mod error;
 pub mod logging;
 pub mod metrics;
+pub mod param_patches;
+pub mod param_patches_config;
 pub mod server;
 pub mod shutdown;
 pub mod transform;

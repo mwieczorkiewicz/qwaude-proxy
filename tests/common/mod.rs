@@ -11,6 +11,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, dead_code)]
 
 use qwaude_proxy::config::ProxyConfig;
+use qwaude_proxy::param_patches::{thinking_mode_sampling_preset, PatchMode, RequestParamPatches};
 use qwaude_proxy::server::{build_router, AppState};
 use serde_json::json;
 use std::time::Duration;
@@ -32,6 +33,7 @@ pub fn test_config(vllm_base_url: String) -> ProxyConfig {
         total_timeout: Duration::from_secs(2),
         verbose_payload_logging: false,
         default_thinking_token_budget: None,
+        request_param_patches: None,
     }
 }
 
@@ -47,6 +49,15 @@ pub fn test_router_with_thinking_budget(
 ) -> axum::Router {
     let mut config = test_config(vllm_base_url);
     config.default_thinking_token_budget = default_thinking_token_budget;
+    build_router(AppState::new(config))
+}
+
+pub fn test_router_with_thinking_mode_patches_always(vllm_base_url: String) -> axum::Router {
+    let mut config = test_config(vllm_base_url);
+    config.request_param_patches = Some(RequestParamPatches {
+        mode: PatchMode::Always,
+        fields: thinking_mode_sampling_preset(),
+    });
     build_router(AppState::new(config))
 }
 

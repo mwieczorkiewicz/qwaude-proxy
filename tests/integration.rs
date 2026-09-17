@@ -12,7 +12,7 @@ use http_body_util::BodyExt;
 use serde_json::json;
 use std::time::{Duration, Instant};
 use tower::ServiceExt;
-use wiremock::matchers::{header, method, path};
+use wiremock::matchers::{body_partial_json, header, method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 async fn post_json(router: axum::Router, body: serde_json::Value) -> axum::response::Response {
@@ -55,6 +55,28 @@ async fn non_streaming_response_round_trips_verbatim() {
     let body = response_json(response).await;
     assert_eq!(body["id"], "chatcmpl-test");
     assert_eq!(body["choices"][0]["message"]["content"], "hello");
+}
+
+#[tokio::test]
+async fn thinking_mode_sampling_patches_are_forwarded_to_upstream() {
+    let mock_server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/chat/completions"))
+        .and(body_partial_json(json!({
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "top_k": 20,
+            "min_p": 0.0,
+            "presence_penalty": 0.0,
+            "repetition_penalty": 1.0,
+        })))
+        .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({"ok": true})))
+        .mount(&mock_server)
+        .await;
+
+    let router = common::test_router_with_thinking_mode_patches_always(mock_server.uri());
+    let response = post_json(router, common::sample_request_body(false)).await;
+    assert_eq!(response.status(), StatusCode::OK);
 }
 
 #[tokio::test]
